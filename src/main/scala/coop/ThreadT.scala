@@ -40,26 +40,27 @@ object ThreadT {
     fork[M, Boolean](false, true).ifM(child.void, ().pure[ThreadT[M, ?]])
 
   def roundRobin[M[_]: Monad, A](main: ThreadT[M, A]): M[Unit] = {
-    def loop(work: Queue[ThreadT[M, _]]): M[Unit] =
-      work.dequeueOption match {
+    // we maintain a separate head just to avoid queue prepending
+    def loop(head: Option[ThreadT[M, _]], work: Queue[ThreadT[M, _]]): M[Unit] =
+      head.map(h => (h, work)).orElse(work.dequeueOption) match {
         case Some((head, tail)) =>
           import ThreadF._
 
           head.resume flatMap {
             case Left(Fork(left, right)) =>
-              loop(tail.enqueue(left).enqueue(right))   // treat forking as a yield
+              loop(Some(left), tail.enqueue(right))
 
             case Left(Cede(results)) =>
-              loop(tail.enqueue(results))
+              loop(None, tail.enqueue(results))
 
             case Left(Done) | Right(_) =>
-              loop(tail)
+              loop(None, tail)
           }
 
         case None =>
           Monad[M].unit
       }
 
-    loop(Queue(main))
+    loop(Some(main), Queue.empty)
   }
 }
