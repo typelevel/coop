@@ -22,25 +22,25 @@ import cats.implicits._
 
 import scala.collection.immutable.Queue
 
-object Thread {
+object ThreadT {
 
-  def liftF[M[_]: Functor, A](ma: M[A]): Thread[M, A] =
+  def liftF[M[_]: Functor, A](ma: M[A]): ThreadT[M, A] =
     FreeT.liftT[ThreadF, M, A](ma)
 
-  def fork[M[_]: Applicative, A](left: A, right: A): Thread[M, A] =
+  def fork[M[_]: Applicative, A](left: A, right: A): ThreadT[M, A] =
     FreeT.liftF[ThreadF, M, A](ThreadF.Fork(left, right))
 
-  def cede[M[_]: Applicative, A](results: A): Thread[M, A] =
+  def cede[M[_]: Applicative, A](results: A): ThreadT[M, A] =
     FreeT.liftF[ThreadF, M, A](ThreadF.Cede(results))
 
-  def done[M[_]: Applicative, A]: Thread[M, A] =
+  def done[M[_]: Applicative, A]: ThreadT[M, A] =
     FreeT.liftF[ThreadF, M, A](ThreadF.Done)
 
-  def start[M[_]: Applicative, A](child: Thread[M, A]): Thread[M, Unit] =
-    fork[M, Boolean](false, true).ifM(child.void, ().pure[Thread[M, ?]])
+  def start[M[_]: Applicative, A](child: ThreadT[M, A]): ThreadT[M, Unit] =
+    fork[M, Boolean](false, true).ifM(child.void, ().pure[ThreadT[M, ?]])
 
-  def roundRobin[M[_]: Monad, A](main: Thread[M, A]): M[Unit] = {
-    def loop(work: Queue[Thread[M, _]]): M[Unit] =
+  def roundRobin[M[_]: Monad, A](main: ThreadT[M, A]): M[Unit] = {
+    def loop(work: Queue[ThreadT[M, _]]): M[Unit] =
       work.dequeueOption match {
         case Some((head, tail)) =>
           import ThreadF._

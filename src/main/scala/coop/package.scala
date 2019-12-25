@@ -17,5 +17,5 @@
 import cats.free.FreeT
 
 package object coop {
-  type Thread[M[_], A] = FreeT[ThreadF, M, A]
+  type ThreadT[M[_], A] = FreeT[ThreadF, M, A]
 }
