@@ -1,13 +1,10 @@
 # coop
 
-TODO description
+Based on http://www.haskellforall.com/2013/06/from-zero-to-cooperative-threads-in-33.html?m=1
 
 ## Usage
 
 ```sbt
-// ...if using bintray
-// resolvers += Resolver.bintrayRepo("djspiewak", "maven")
-
 libraryDependencies += "com.codecommit" %% "coop" % "<version>"
 ```
 

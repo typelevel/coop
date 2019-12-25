@@ -14,4 +14,8 @@
  * limitations under the License.
  */
 
-package object coop
+import cats.free.FreeT
+
+package object coop {
+  type Thread[M[_], A] = FreeT[ThreadF, M, A]
+}
