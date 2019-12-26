@@ -16,30 +16,31 @@
 
 package coop
 
-import cats.Applicative
+import cats.Monad
 import cats.data.Kleisli
 import cats.implicits._
+import cats.mtl.ApplicativeAsk
 
-final class MVar[M[_]: Applicative, A] private () {
+final class MVar[F[_]: Monad: ApplicativeThread: ApplicativeAsk[?[_], MVar.Universe], A] private () {
   import MVar._
 
   private[this] val Key = this.asInstanceOf[MVar[Any, Any]]
 
-  val tryRead: MVarT[M, Option[A]] =
-    Kleisli.ask[ThreadT[M, ?], MVarUniverse] map { universe =>
+  val tryRead: F[Option[A]] =
+    ApplicativeAsk[F, Universe].ask map { universe =>
       universe()
         .get(Key)
         .map(_.asInstanceOf[A])
     }
 
-  lazy val read: MVarT[M, A] =
+  lazy val read: F[A] =
     tryRead flatMap {
-      case Some(a) => a.pure[MVarT[M, ?]]
-      case None => cede >> read
+      case Some(a) => a.pure[F]
+      case None => ApplicativeThread[F].cede_ >> read
     }
 
-  def tryPut(a: A): MVarT[M, Boolean] =
-    Kleisli.ask[ThreadT[M, ?], MVarUniverse] map { universe =>
+  def tryPut(a: A): F[Boolean] =
+    ApplicativeAsk[F, Universe].ask map { universe =>
       val u = universe()
 
       u.get(Key) match {
@@ -52,16 +53,16 @@ final class MVar[M[_]: Applicative, A] private () {
       }
     }
 
-  def put(a: A): MVarT[M, Unit] =
+  def put(a: A): F[Unit] =
     tryPut(a) flatMap { p =>
       if (p)
-        ().pure[MVarT[M, ?]]
+        ().pure[F]
       else
-        cede >> put(a)
+        ApplicativeThread[F].cede_ >> put(a)
     }
 
-  val tryTake: MVarT[M, Option[A]] =
-    Kleisli.ask[ThreadT[M, ?], MVarUniverse] map { universe =>
+  val tryTake: F[Option[A]] =
+    ApplicativeAsk[F, Universe].ask map { universe =>
       val u = universe()
       u.get(Key) match {
         case Some(a) =>
@@ -73,41 +74,38 @@ final class MVar[M[_]: Applicative, A] private () {
       }
     }
 
-  lazy val take: MVarT[M, A] =
+  lazy val take: F[A] =
     tryTake flatMap {
-      case Some(a) => a.pure[MVarT[M, ?]]
-      case None => cede >> take
+      case Some(a) => a.pure[F]
+      case None => ApplicativeThread[F].cede_ >> take
     }
 
-  def swap(a: A): MVarT[M, A] =
-    Kleisli.ask[ThreadT[M, ?], MVarUniverse] flatMap { universe =>
+  def swap(a: A): F[A] =
+    ApplicativeAsk[F, Universe].ask flatMap { universe =>
       val u = universe()
 
       u.get(Key) match {
         case Some(oldA) =>
           universe() = u.updated(Key, a.asInstanceOf[Any])
-          oldA.asInstanceOf[A].pure[MVarT[M, ?]]
+          oldA.asInstanceOf[A].pure[F]
 
         case None =>
-          cede >> swap(a)
+          ApplicativeThread[F].cede_ >> swap(a)
       }
     }
-
-  private[this] val cede = Kleisli.liftF[ThreadT[M, ?], MVarUniverse, Unit](ThreadT.cede(()))
 }
 
 object MVar {
-  // we use a kleisli of a ref of a map here rather than StateT to avoid issues with zeros in M
+  // we use a kleisli of a ref of a map here rather than StateT to avoid issues with zeros in F
   // the Any(s) are required due to the existentiality of the A types
-  type MVarUniverse = UnsafeRef[Map[MVar[Any, Any], Any]]
-  type MVarT[M[_], A] = Kleisli[ThreadT[M, ?], MVarUniverse, A]
+  type Universe = UnsafeRef[Map[MVar[Any, Any], Any]]
 
-  def empty[M[_]: Applicative, A]: MVarT[M, MVar[M, A]] =
-    new MVar[M, A].pure[MVarT[M, ?]]
+  def empty[F[_]: Monad: ApplicativeThread: ApplicativeAsk[?[_], MVar.Universe], A]: F[MVar[F, A]] =
+    new MVar[F, A].pure[F]
 
-  def apply[M[_]: Applicative, A](a: A): MVarT[M, MVar[M, A]] =
-    empty[M, A].flatMap(mv => mv.put(a).as(mv))
+  def apply[F[_]: Monad: ApplicativeThread: ApplicativeAsk[?[_], MVar.Universe], A](a: A): F[MVar[F, A]] =
+    empty[F, A].flatMap(mv => mv.put(a).as(mv))
 
-  def resolve[M[_], A](mvt: MVarT[M, A]): ThreadT[M, A] =
+  def resolve[F[_], A](mvt: Kleisli[F, Universe, A]): F[A] =
     mvt.run(new UnsafeRef(Map[MVar[Any, Any], Any]()))
 }

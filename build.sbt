@@ -23,7 +23,8 @@ ThisBuild / publishGithubUser := "djspiewak"
 ThisBuild / publishFullName := "Daniel Spiewak"
 
 libraryDependencies ++= Seq(
-  "org.typelevel" %% "cats-free" % "2.1.0",
+  "org.typelevel" %% "cats-free"     % "2.1.0",
+  "org.typelevel" %% "cats-mtl-core" % "0.7.0",
 
   "org.specs2" %% "specs2-core" % "4.8.1" % Test)
 

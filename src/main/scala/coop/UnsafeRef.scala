@@ -16,7 +16,7 @@
 
 package coop
 
-final class UnsafeRef[A](private[this] var contents: A) {
-  def update(a: A): Unit = contents = a
-  def apply(): A = contents
+final class UnsafeRef[A] private[coop] (private[this] var contents: A) {
+  private[coop] def update(a: A): Unit = contents = a
+  private[coop] def apply(): A = contents
 }
