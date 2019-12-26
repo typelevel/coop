@@ -16,86 +16,86 @@
 
 package coop
 
-import cats.Monad
+import cats.{Applicative, Defer, Functor, Monad}
 import cats.data.Kleisli
 import cats.implicits._
 import cats.mtl.ApplicativeAsk
 
-final class MVar[F[_]: Monad: ApplicativeThread: ApplicativeAsk[?[_], MVar.Universe], A] private () {
-  import MVar._
+final class MVar[A] private () {
 
-  private[this] val Key = this.asInstanceOf[MVar[Any, Any]]
+  private[this] val Key = this.asInstanceOf[MVar[Any]]
 
-  private[this] val getU: F[Option[A]] =
-    ApplicativeAsk[F, Universe].ask.map(_().get(Key).map(_.asInstanceOf[A]))
+  def tryRead[F[_]: Functor: MVar.Ask]: F[Option[A]] = getU[F]
 
-  private[this] def setU(a: A): F[Unit] =
-    ApplicativeAsk[F, Universe].ask.map(_() + (Key -> a.asInstanceOf[Any]))
-
-  private[this] val removeU: F[Unit] =
-    ApplicativeAsk[F, Universe].ask.map(_() - Key)
-
-  val tryRead: F[Option[A]] = getU
-
-  lazy val read: F[A] =
-    tryRead flatMap {
+  def read[F[_]: Monad: ApplicativeThread: MVar.Ask]: F[A] =
+    tryRead[F] flatMap {
       case Some(a) => a.pure[F]
-      case None => ApplicativeThread[F].cede_ >> read
+      case None => ApplicativeThread[F].cede_ >> read[F]
     }
 
-  def tryPut(a: A): F[Boolean] =
-    getU flatMap {
+  def tryPut[F[_]: Monad: MVar.Ask](a: A): F[Boolean] =
+    getU[F] flatMap {
       case Some(_) =>
         false.pure[F]
 
       case None =>
-        setU(a).as(true)
+        setU[F](a).as(true)
     }
 
-  def put(a: A): F[Unit] =
-    tryPut(a) flatMap { p =>
+  def put[F[_]: Monad: ApplicativeThread: MVar.Ask](a: A): F[Unit] =
+    tryPut[F](a) flatMap { p =>
       if (p)
         ().pure[F]
       else
-        ApplicativeThread[F].cede_ >> put(a)
+        ApplicativeThread[F].cede_ >> put[F](a)
     }
 
-  val tryTake: F[Option[A]] =
-    getU flatMap {
+  def tryTake[F[_]: Monad: MVar.Ask]: F[Option[A]] =
+    getU[F] flatMap {
       case Some(a) =>
-        removeU.as(Some(a): Option[A])
+        removeU[F].as(Some(a): Option[A])
 
       case None =>
         (None: Option[A]).pure[F]
     }
 
-  lazy val take: F[A] =
-    tryTake flatMap {
+  def take[F[_]: Monad: ApplicativeThread: MVar.Ask]: F[A] =
+    tryTake[F] flatMap {
       case Some(a) => a.pure[F]
-      case None => ApplicativeThread[F].cede_ >> take
+      case None => ApplicativeThread[F].cede_ >> take[F]
     }
 
-  def swap(a: A): F[A] =
-    getU flatMap {
+  def swap[F[_]: Monad: ApplicativeThread: MVar.Ask](a: A): F[A] =
+    getU[F] flatMap {
       case Some(oldA) =>
-        setU(a).as(oldA)
+        setU[F](a).as(oldA)
 
       case None =>
-        ApplicativeThread[F].cede_ >> swap(a)
+        ApplicativeThread[F].cede_ >> swap[F](a)
     }
+
+  private[this] def getU[F[_]: Functor: MVar.Ask]: F[Option[A]] =
+    ApplicativeAsk[F, MVar.Universe].ask.map(_().get(Key).map(_.asInstanceOf[A]))
+
+  private[this] def setU[F[_]: Functor: MVar.Ask](a: A): F[Unit] =
+    ApplicativeAsk[F, MVar.Universe].ask.map(_() + (Key -> a.asInstanceOf[Any]))
+
+  private[this] def removeU[F[_]: Functor: MVar.Ask]: F[Unit] =
+    ApplicativeAsk[F, MVar.Universe].ask.map(_() - Key)
 }
 
 object MVar {
   // we use a kleisli of a ref of a map here rather than StateT to avoid issues with zeros in F
   // the Any(s) are required due to the existentiality of the A types
-  type Universe = UnsafeRef[Map[MVar[Any, Any], Any]]
+  type Universe = UnsafeRef[Map[MVar[Any], Any]]
+  type Ask[F[_]] = ApplicativeAsk[F, Universe]
 
-  def empty[F[_]: Monad: ApplicativeThread: ApplicativeAsk[?[_], MVar.Universe], A]: F[MVar[F, A]] =
-    new MVar[F, A].pure[F]
+  def empty[F[_]: Applicative: Defer, A]: F[MVar[A]] =
+    Defer[F].defer(new MVar[A].pure[F])
 
-  def apply[F[_]: Monad: ApplicativeThread: ApplicativeAsk[?[_], MVar.Universe], A](a: A): F[MVar[F, A]] =
-    empty[F, A].flatMap(mv => mv.put(a).as(mv))
+  def apply[F[_]: Monad: ApplicativeThread: Ask: Defer, A](a: A): F[MVar[A]] =
+    empty[F, A].flatMap(mv => mv.put[F](a).as(mv))
 
   def resolve[F[_], A](mvt: Kleisli[F, Universe, A]): F[A] =
-    mvt.run(new UnsafeRef(Map[MVar[Any, Any], Any]()))
+    mvt.run(new UnsafeRef(Map[MVar[Any], Any]()))
 }
