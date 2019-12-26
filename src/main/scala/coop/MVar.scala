@@ -26,12 +26,16 @@ final class MVar[F[_]: Monad: ApplicativeThread: ApplicativeAsk[?[_], MVar.Unive
 
   private[this] val Key = this.asInstanceOf[MVar[Any, Any]]
 
-  val tryRead: F[Option[A]] =
-    ApplicativeAsk[F, Universe].ask map { universe =>
-      universe()
-        .get(Key)
-        .map(_.asInstanceOf[A])
-    }
+  private[this] val getU: F[Option[A]] =
+    ApplicativeAsk[F, Universe].ask.map(_().get(Key).map(_.asInstanceOf[A]))
+
+  private[this] def setU(a: A): F[Unit] =
+    ApplicativeAsk[F, Universe].ask.map(_() + (Key -> a.asInstanceOf[Any]))
+
+  private[this] val removeU: F[Unit] =
+    ApplicativeAsk[F, Universe].ask.map(_() - Key)
+
+  val tryRead: F[Option[A]] = getU
 
   lazy val read: F[A] =
     tryRead flatMap {
@@ -40,17 +44,12 @@ final class MVar[F[_]: Monad: ApplicativeThread: ApplicativeAsk[?[_], MVar.Unive
     }
 
   def tryPut(a: A): F[Boolean] =
-    ApplicativeAsk[F, Universe].ask map { universe =>
-      val u = universe()
+    getU flatMap {
+      case Some(_) =>
+        false.pure[F]
 
-      u.get(Key) match {
-        case Some(_) =>
-          false
-
-        case None =>
-          universe() = u + (Key -> a.asInstanceOf[Any])
-          true
-      }
+      case None =>
+        setU(a).as(true)
     }
 
   def put(a: A): F[Unit] =
@@ -62,16 +61,12 @@ final class MVar[F[_]: Monad: ApplicativeThread: ApplicativeAsk[?[_], MVar.Unive
     }
 
   val tryTake: F[Option[A]] =
-    ApplicativeAsk[F, Universe].ask map { universe =>
-      val u = universe()
-      u.get(Key) match {
-        case Some(a) =>
-          universe() = u - Key
-          Some(a.asInstanceOf[A])
+    getU flatMap {
+      case Some(a) =>
+        removeU.as(Some(a): Option[A])
 
-        case None =>
-          None
-      }
+      case None =>
+        (None: Option[A]).pure[F]
     }
 
   lazy val take: F[A] =
@@ -81,17 +76,12 @@ final class MVar[F[_]: Monad: ApplicativeThread: ApplicativeAsk[?[_], MVar.Unive
     }
 
   def swap(a: A): F[A] =
-    ApplicativeAsk[F, Universe].ask flatMap { universe =>
-      val u = universe()
+    getU flatMap {
+      case Some(oldA) =>
+        setU(a).as(oldA)
 
-      u.get(Key) match {
-        case Some(oldA) =>
-          universe() = u.updated(Key, a.asInstanceOf[Any])
-          oldA.asInstanceOf[A].pure[F]
-
-        case None =>
-          ApplicativeThread[F].cede_ >> swap(a)
-      }
+      case None =>
+        ApplicativeThread[F].cede_ >> swap(a)
     }
 }
 
