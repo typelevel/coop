@@ -50,14 +50,12 @@ import scala.collection.immutable.Vector
 
 val thread1 = {
   val mod = ThreadT.liftF(State.modify[Vector[Int]](_ :+ 0)) >> ThreadT.cede(())
-  val bounded = mod.untilM_(ThreadT.liftF(State.get[Vector[Int]]).map(_.length >= 10))
-  bounded >> ThreadT.done
+  mod.untilM_(ThreadT.liftF(State.get[Vector[Int]]).map(_.length >= 10))
 }
 
 val thread2 = {
   val mod = ThreadT.liftF(State.modify[Vector[Int]](_ :+ 1)) >> ThreadT.cede(())
-  val bounded = mod.untilM_(ThreadT.liftF(State.get[Vector[Int]]).map(_.length >= 10))
-  bounded >> ThreadT.done
+  mod.untilM_(ThreadT.liftF(State.get[Vector[Int]]).map(_.length >= 10))
 }
 
 val main = ThreadT.start(thread1) >> ThreadT.start(thread2)
@@ -77,14 +75,12 @@ import scala.collection.immutable.Vector
 
 val thread1 = {
   val mod = ThreadT.liftF(State.modify[Vector[Int]](_ :+ 0)) // >> ThreadT.cede(())
-  val bounded = mod.untilM_(ThreadT.liftF(State.get[Vector[Int]]).map(_.length >= 10))
-  bounded >> ThreadT.done
+  mod.untilM_(ThreadT.liftF(State.get[Vector[Int]]).map(_.length >= 10))
 }
 
 val thread2 = {
   val mod = ThreadT.liftF(State.modify[Vector[Int]](_ :+ 1)) // >> ThreadT.cede(())
-  val bounded = mod.untilM_(ThreadT.liftF(State.get[Vector[Int]]).map(_.length >= 10))
-  bounded >> ThreadT.done
+  mod.untilM_(ThreadT.liftF(State.get[Vector[Int]]).map(_.length >= 10))
 }
 
 val main = ThreadT.start(thread1) >> ThreadT.start(thread2)
@@ -93,3 +89,19 @@ ThreadT.roundRobin(main).runS(Vector()).value   // => Vector(0, 0, 0, 0, 0, 0, 0
 ```
 
 The first thread runs until it has filled the entire vector with `0`s, after which it *finally* yields and the second thread only has a chance to insert a single value (which immediately overflows the length).
+
+## MTL Style
+
+A `ApplicativeThread` typeclass, in the style of [Cats MTL](https://github.com/typelevel/cats-mtl), is also provided to make it easier to use `ThreadT` as part of more complex stacks:
+
+```scala
+def thread1[F[_]: Monad: ApplicativeThread](implicit F: MonadState[F, Vector[Int]]): F[Unit] = {
+  val mod = F.modify(_ :+ 0) >> ApplicativeThread[F].cede_
+  mod.untilM(F.get).map(_.length >= 10)
+}
+
+def main[F[_]: Apply: ApplicativeThread](thread1: F[Unit], thread2: F[Unit]): F[Unit] =
+  ApplicativeThread[F].start(thread1) *> ApplicativeThread[F].start(thread2)
+```
+
+`ApplicativeThread` will inductively derive over `Kleisli` and `EitherT`, and defines a base instance for `FreeT[S[_], F[_], ?]` given an `InjectK[ThreadF, S]` (so, strictly more general than just `ThreadT` itself). It notably will not auto-derive over `StateT` or `WriterT`, due to the value loss which occurs in `fork`/`start`. If you need `StateT`-like functionality, it is recommended you either include some sort of `StateF` in your `FreeT` suspension, or nest the `State` functionality *within* the `FreeT`.

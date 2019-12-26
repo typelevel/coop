@@ -28,15 +28,10 @@ class ThreadTSpecs extends Specification {
     "interleave writer tells" in {
       type M[A] = WriterT[Eval, List[Int], A]
 
-      def writeRange(from: Int, to: Int): ThreadT[M, Unit] = {
-        if (from < to) {
-          ThreadT.liftF[M, Unit](WriterT.tell(from :: Nil)) >>
-            ThreadT.cede(()) >>
-            writeRange(from + 1, to)
-        } else {
-          ThreadT.done
+      def writeRange(from: Int, to: Int): ThreadT[M, Unit] =
+        from.until(to).toList traverse_ { i =>
+          ThreadT.liftF[M, Unit](WriterT.tell(i :: Nil)) >> ThreadT.cede(())
         }
-      }
 
       val main = ThreadT.start(writeRange(0, 10)) >>
         ThreadT.start(writeRange(10, 20)) >>
