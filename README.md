@@ -105,3 +105,11 @@ def main[F[_]: Apply: ApplicativeThread](thread1: F[Unit], thread2: F[Unit]): F[
 ```
 
 `ApplicativeThread` will inductively derive over `Kleisli` and `EitherT`, and defines a base instance for `FreeT[S[_], F[_], ?]` given an `InjectK[ThreadF, S]` (so, strictly more general than just `ThreadT` itself). It notably will not auto-derive over `StateT` or `WriterT`, due to the value loss which occurs in `fork`/`start`. If you need `StateT`-like functionality, it is recommended you either include some sort of `StateF` in your `FreeT` suspension, or nest the `State` functionality *within* the `FreeT`.
+
+## `MVar`
+
+An experimental implementation of `MVar` is made available, mostly because it makes it theoretically possible to define all the things. The API mirrors Haskell's. The implementation assumes an `ApplicativeAsk` (from Cats MTL) of an `UnsafeRef` which contains the uniquely indexed state for every `MVar`. This could have just been done using a private `var` instead, but I wanted to be explicit about the state management.
+
+`UnsafeRef` is used rather than `StateT` or `InjectK[StateF[S, ?], F]` to avoid issues with `MonadError` instances in the stack. Additionally, as mentioned earlier, `ApplicativeThread` will not auto-derive over `StateT` due to issues with value loss, so all in all it's a better approach if we aren't going to use a `var`.
+
+All blocking operations are implemented as spin waits with interleaving `cede`s, ensuring that execution is not blocked. A more efficient implementation is possible by introducing the concept of a monitor in `ThreadF`, but efficiency is the *last* thing you should be worried about if you're using this library.
