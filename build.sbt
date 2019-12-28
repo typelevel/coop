@@ -29,3 +29,10 @@ libraryDependencies ++= Seq(
   "org.specs2" %% "specs2-core" % "4.8.1" % Test)
 
 addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.1")
+
+Global / homepage := Some(url("https://github.com/djspiewak/coop"))
+
+Global / scmInfo := Some(
+  ScmInfo(
+    url("https://github.com/djspiewak/coop"),
+    "git@github.com:djspiewak/coop.git"))
