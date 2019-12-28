@@ -59,7 +59,7 @@ object ApplicativeThread {
         FreeT.liftF(S(ThreadF.Done))
 
       def start[A](child: FreeT[S, F, A]): FreeT[S, F, Unit] =
-        fork(false, true).ifM(child.void, ().pure[FreeT[S, F, ?]])
+        fork(false, true).ifM(child.void >> done[Unit], ().pure[FreeT[S, F, ?]])
     }
 
   implicit def forKleisli[F[_]: Monad: ApplicativeThread, R]: ApplicativeThread[Kleisli[F, R, ?]] =

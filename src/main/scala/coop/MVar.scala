@@ -21,7 +21,7 @@ import cats.data.Kleisli
 import cats.implicits._
 import cats.mtl.ApplicativeAsk
 
-final class MVar[A] private () {
+final class MVar[A] private () { outer =>
 
   private[this] val Key = this.asInstanceOf[MVar[Any]]
 
@@ -43,12 +43,7 @@ final class MVar[A] private () {
     }
 
   def put[F[_]: Monad: ApplicativeThread: MVar.Ask](a: A): F[Unit] =
-    tryPut[F](a) flatMap { p =>
-      if (p)
-        ().pure[F]
-      else
-        ApplicativeThread[F].cede_ >> put[F](a)
-    }
+    tryPut[F](a).ifM(().pure[F], ApplicativeThread[F].cede_ >> put[F](a))
 
   def tryTake[F[_]: Monad: MVar.Ask]: F[Option[A]] =
     getU[F] flatMap {
@@ -74,6 +69,26 @@ final class MVar[A] private () {
         ApplicativeThread[F].cede_ >> swap[F](a)
     }
 
+  def apply[F[_]: Monad: ApplicativeThread: MVar.Ask]: MVarPartiallyApplied[F] =
+    new MVarPartiallyApplied[F]
+
+  class MVarPartiallyApplied[F[_]: Monad: ApplicativeThread: MVar.Ask] {
+
+    val tryRead: F[Option[A]] = outer.tryRead[F]
+
+    val read: F[A] = outer.read[F]
+
+    def tryPut(a: A): F[Boolean] = outer.tryPut[F](a)
+
+    def put(a: A): F[Unit] = outer.put[F](a)
+
+    val tryTake: F[Option[A]] = outer.tryTake[F]
+
+    val take: F[A] = outer.take[F]
+
+    def swap(a: A): F[A] = outer.swap[F](a)
+  }
+
   private[this] def getU[F[_]: Functor: MVar.Ask]: F[Option[A]] =
     ApplicativeAsk[F, MVar.Universe].ask.map(_().get(Key).map(_.asInstanceOf[A]))
 
@@ -81,7 +96,7 @@ final class MVar[A] private () {
     ApplicativeAsk[F, MVar.Universe].ask.map(_() += (Key -> a.asInstanceOf[Any]))
 
   private[this] def removeU[F[_]: Functor: MVar.Ask]: F[Unit] =
-    ApplicativeAsk[F, MVar.Universe].ask.map(_() - Key)
+    ApplicativeAsk[F, MVar.Universe].ask.map(_() -= Key)
 }
 
 object MVar {
@@ -91,7 +106,7 @@ object MVar {
   type Ask[F[_]] = ApplicativeAsk[F, Universe]
 
   def empty[F[_]: Applicative, A]: F[MVar[A]] =
-    new MVar[A].pure[F]   // not actually pure due to object identity, but whatevs
+    ().pure[F].map(_ => new MVar[A])   // not actually pure due to object identity, but whatevs
 
   def apply[F[_]: Monad: ApplicativeThread: Ask, A](a: A): F[MVar[A]] =
     empty[F, A].flatMap(mv => mv.put[F](a).as(mv))
