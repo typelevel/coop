@@ -16,7 +16,7 @@
 
 package coop
 
-import cats.{Applicative, Defer, Functor, Monad}
+import cats.{Applicative, Functor, Monad}
 import cats.data.Kleisli
 import cats.implicits._
 import cats.mtl.ApplicativeAsk
@@ -78,7 +78,7 @@ final class MVar[A] private () {
     ApplicativeAsk[F, MVar.Universe].ask.map(_().get(Key).map(_.asInstanceOf[A]))
 
   private[this] def setU[F[_]: Functor: MVar.Ask](a: A): F[Unit] =
-    ApplicativeAsk[F, MVar.Universe].ask.map(_() + (Key -> a.asInstanceOf[Any]))
+    ApplicativeAsk[F, MVar.Universe].ask.map(_() += (Key -> a.asInstanceOf[Any]))
 
   private[this] def removeU[F[_]: Functor: MVar.Ask]: F[Unit] =
     ApplicativeAsk[F, MVar.Universe].ask.map(_() - Key)
@@ -90,10 +90,10 @@ object MVar {
   type Universe = UnsafeRef[Map[MVar[Any], Any]]
   type Ask[F[_]] = ApplicativeAsk[F, Universe]
 
-  def empty[F[_]: Applicative: Defer, A]: F[MVar[A]] =
-    Defer[F].defer(new MVar[A].pure[F])
+  def empty[F[_]: Applicative, A]: F[MVar[A]] =
+    new MVar[A].pure[F]   // not actually pure due to object identity, but whatevs
 
-  def apply[F[_]: Monad: ApplicativeThread: Ask: Defer, A](a: A): F[MVar[A]] =
+  def apply[F[_]: Monad: ApplicativeThread: Ask, A](a: A): F[MVar[A]] =
     empty[F, A].flatMap(mv => mv.put[F](a).as(mv))
 
   def resolve[F[_], A](mvt: Kleisli[F, Universe, A]): F[A] =

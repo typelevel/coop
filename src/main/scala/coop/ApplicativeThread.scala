@@ -28,7 +28,7 @@ trait ApplicativeThread[F[_]] extends Serializable {
 
   def cede[A](results: A): F[A]
 
-  val cede_ : F[Unit] = cede(())
+  def cede_ : F[Unit] = cede(())
 
   def done[A]: F[A]
 
