@@ -22,6 +22,8 @@ ThisBuild / organization := "com.codecommit"
 ThisBuild / publishGithubUser := "djspiewak"
 ThisBuild / publishFullName := "Daniel Spiewak"
 
+ThisBuild / strictSemVer := false
+
 libraryDependencies ++= Seq(
   "org.typelevel" %% "cats-free"     % "2.1.0",
   "org.typelevel" %% "cats-mtl-core" % "0.7.0",
