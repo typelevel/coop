@@ -17,7 +17,6 @@
 package coop
 
 import cats.Functor
-import cats.implicits._
 
 sealed trait ThreadF[+A] extends Product with Serializable
 

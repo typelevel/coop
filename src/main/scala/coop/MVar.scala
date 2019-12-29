@@ -16,7 +16,7 @@
 
 package coop
 
-import cats.{Applicative, Functor, Monad}
+import cats.{Functor, Monad}
 import cats.data.Kleisli
 import cats.implicits._
 import cats.mtl.ApplicativeAsk

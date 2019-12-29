@@ -16,7 +16,7 @@
 
 package coop
 
-import cats.{Eval, Monad}
+import cats.Eval
 import cats.data.WriterT
 import cats.implicits._
 

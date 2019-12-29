@@ -76,7 +76,9 @@ object ThreadT {
               loop(None, tail, locks.updated(id, locks(id).enqueue(results)))
 
             case Left(Notify(id, results)) =>
-              loop(None, tail.enqueueAll(locks(id)).enqueue(results), locks.updated(id, Queue.empty))
+              // enqueueAll was added in 2.13
+              val tail2 = locks(id).foldLeft(tail)(_.enqueue(_))
+              loop(None, tail2.enqueue(results), locks.updated(id, Queue.empty))
           }
 
         // if we have outstanding awaits but no active fibers, then we're deadlocked
