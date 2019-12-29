@@ -37,7 +37,9 @@ class ThreadTSpecs extends Specification {
         ThreadT.start(writeRange(10, 20)) >>
         ThreadT.start(writeRange(20, 30))
 
-      val (results, _) = ThreadT.roundRobin(main).run.value
+      val (results, completed) = ThreadT.roundRobin(main).run.value
+
+      completed must beTrue
 
       results mustEqual List(
         0, 10, 20,
@@ -77,9 +79,20 @@ class ThreadTSpecs extends Specification {
         _ <- liftF[M, Unit](WriterT.tell(3 :: Nil))
       } yield ()
 
-      val (results, _) = roundRobin(main).run.value
+      val (results, completed) = roundRobin(main).run.value
 
+      completed must beTrue
       results mustEqual 0.to(3).toList
+    }
+
+    "detect a trivial deadlock" in {
+      val main = for {
+        m <- ThreadT.monitor[Eval]
+        _ <- ThreadT.start(ThreadT.await[Eval](m))
+        _ <- ThreadT.cede[Eval]
+      } yield ()
+
+      ThreadT.roundRobin(main).value must beFalse
     }
   }
 }
