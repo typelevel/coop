@@ -16,40 +16,33 @@
 
 package coop
 
-import cats.{Applicative, Eval, Traverse}
+import cats.Functor
 import cats.implicits._
 
 sealed trait ThreadF[+A] extends Product with Serializable
 
 object ThreadF {
 
-  implicit val traverse: Traverse[ThreadF] = new Traverse[ThreadF] {
+  implicit val functor: Functor[ThreadF] = new Functor[ThreadF] {
+    def map[A, B](fa: ThreadF[A])(f: A => B): ThreadF[B] = fa match {
+      case Fork(left, right) => Fork(f(left), f(right))
+      case Cede(result) => Cede(f(result))
+      case Done => Done
 
-    def foldLeft[A, B](fa: ThreadF[A], b: B)(f: (B, A) => B): B = fa match {
-      case Fork(left, right) => f(f(b, left), right)
-      case Cede(result) => f(b, result)
-      case Done => b
-    }
-
-    def foldRight[A, B](fa: ThreadF[A], lb: Eval[B])(f: (A, Eval[B]) => Eval[B]): Eval[B] = fa match {
-      case Fork(left, right) => f(left, f(right, lb))
-      case Cede(result) => f(result, lb)
-      case Done => lb
-    }
-
-    def traverse[G[_]: Applicative, A, B](fa: ThreadF[A])(f: A => G[B]): G[ThreadF[B]] = fa match {
-      case Fork(left, right) =>
-        (f(left), f(right)).mapN(Fork(_, _): ThreadF[B])
-
-      case Cede(result) =>
-        f(result).map(Cede(_): ThreadF[B])
-
-      case Done =>
-        (Done: ThreadF[B]).pure[G]
+      case Monitor(body) => Monitor(body.andThen(f))
+      case Await(id, results) => Await(id, f(results))
+      case Notify(id, results) => Notify(id, f(results))
     }
   }
 
   final case class Fork[A](left: A, right: A) extends ThreadF[A]
   final case class Cede[A](result: A) extends ThreadF[A]
   case object Done extends ThreadF[Nothing]
+
+  final case class Monitor[A](body: MonitorId => A) extends ThreadF[A]
+  final case class Await[A](id: MonitorId, results: A) extends ThreadF[A]
+  final case class Notify[A](id: MonitorId, results: A) extends ThreadF[A]
+
+  // an opaque fresh id
+  final class MonitorId private[coop] ()
 }

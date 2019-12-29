@@ -21,6 +21,8 @@ import cats.data.{EitherT, Kleisli}
 import cats.free.FreeT
 import cats.implicits._
 
+import ThreadF.MonitorId
+
 trait ApplicativeThread[F[_]] extends Serializable {
   val applicative: Applicative[F]
 
@@ -29,6 +31,12 @@ trait ApplicativeThread[F[_]] extends Serializable {
   val cede: F[Unit]
 
   def done[A]: F[A]
+
+  val monitor: F[MonitorId]
+
+  def await(id: MonitorId): F[Unit]
+
+  def notify(id: MonitorId): F[Unit]
 
   def start[A](child: F[A]): F[Unit]
 }
@@ -56,6 +64,15 @@ object ApplicativeThread {
       def done[A]: FreeT[S, F, A] =
         FreeT.liftF(S(ThreadF.Done))
 
+      val monitor: FreeT[S, F, MonitorId] =
+        FreeT.liftF(S(ThreadF.Monitor(m => m)))
+
+      def await(id: MonitorId): FreeT[S, F, Unit] =
+        FreeT.liftF(S(ThreadF.Await(id, ())))
+
+      def notify(id: MonitorId): FreeT[S, F, Unit] =
+        FreeT.liftF(S(ThreadF.Notify(id, ())))
+
       def start[A](child: FreeT[S, F, A]): FreeT[S, F, Unit] =
         fork(false, true).ifM(child.void >> done[Unit], ().pure[FreeT[S, F, ?]])
     }
@@ -74,6 +91,15 @@ object ApplicativeThread {
 
       def done[A]: Kleisli[F, R, A] =
         Kleisli.liftF(thread.done[A])
+
+      val monitor: Kleisli[F, R, MonitorId] =
+        Kleisli.liftF(thread.monitor)
+
+      def await(id: MonitorId): Kleisli[F, R, Unit] =
+        Kleisli.liftF(thread.await(id))
+
+      def notify(id: MonitorId): Kleisli[F, R, Unit] =
+        Kleisli.liftF(thread.notify(id))
 
       def start[A](child: Kleisli[F, R, A]): Kleisli[F, R, Unit] =
         Kleisli.ask[F, R] flatMapF { r =>
@@ -95,6 +121,15 @@ object ApplicativeThread {
 
       def done[A]: EitherT[F, E, A] =
         EitherT.liftF(thread.done[A])
+
+      val monitor: EitherT[F, E, MonitorId] =
+        EitherT.liftF(thread.monitor)
+
+      def await(id: MonitorId): EitherT[F, E, Unit] =
+        EitherT.liftF(thread.await(id))
+
+      def notify(id: MonitorId): EitherT[F, E, Unit] =
+        EitherT.liftF(thread.notify(id))
 
       def start[A](child: EitherT[F, E, A]): EitherT[F, E, Unit] =
         EitherT.liftF(thread.start(child.value))
