@@ -16,8 +16,8 @@
 
 package coop
 
-import cats.{Applicative, InjectK, Monad, Monoid}
-import cats.data.{EitherT, Kleisli, WriterT}
+import cats.{Applicative, InjectK, Monad}
+import cats.data.{EitherT, Kleisli}
 import cats.free.FreeT
 import cats.implicits._
 

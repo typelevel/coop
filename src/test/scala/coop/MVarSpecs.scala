@@ -16,7 +16,7 @@
 
 package coop
 
-import cats.{Eval, Monoid}
+import cats.Monoid
 import cats.data.{Kleisli, State}
 import cats.implicits._
 import cats.mtl.MonadState

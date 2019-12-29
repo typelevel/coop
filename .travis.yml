@@ -9,6 +9,7 @@ branches:
     - /^v\d+\.\d+\.\d+$/      # don't redundantly build tags
 
 scala:
+  - 2.12.10
   - 2.13.1
 
 script:
