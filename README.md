@@ -8,7 +8,7 @@ Based on http://www.haskellforall.com/2013/06/from-zero-to-cooperative-threads-i
 libraryDependencies += "com.codecommit" %% "coop" % "<version>"
 ```
 
-Published for Scala 2.13.1.
+Published for Scala 2.13 and 2.12. Depends on Cats Free 2.1.0 and Cats MTL 0.7.0.
 
 ```scala
 import coop.ThreadT
