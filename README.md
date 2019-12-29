@@ -2,6 +2,8 @@
 
 Based on http://www.haskellforall.com/2013/06/from-zero-to-cooperative-threads-in-33.html?m=1 All credit to Gabriel Gonzales. The minor API and implementation differences from his Haskell version are due to Scala being Scala, and not any sign of original thought on my part.
 
+...okay I take that back. The implementation of monitors is original, but it's so obvious that I'm not sure it counts as anything to take credit for.
+
 ## Usage
 
 ```sbt
