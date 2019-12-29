@@ -17,8 +17,8 @@ import coop.ThreadT
 import cats.effect.IO
 import cats.implicits._
 
-val thread1 = (ThreadT.liftF(IO(println("yo"))) >> ThreadT.cede(())).foreverM
-val thread2 = (ThreadT.liftF(IO(println("dawg"))) >> ThreadT.cede(())).foreverM
+val thread1 = (ThreadT.liftF(IO(println("yo"))) >> ThreadT.cede.foreverM
+val thread2 = (ThreadT.liftF(IO(println("dawg"))) >> ThreadT.cede.foreverM
 
 val main = ThreadT.start(thread1) >> ThreadT.start(thread2)
 
@@ -74,12 +74,12 @@ import cats.implicits._
 import scala.collection.immutable.Vector
 
 val thread1 = {
-  val mod = ThreadT.liftF(State.modify[Vector[Int]](_ :+ 0)) // >> ThreadT.cede(())
+  val mod = ThreadT.liftF(State.modify[Vector[Int]](_ :+ 0)) // >> ThreadT.cede
   mod.untilM_(ThreadT.liftF(State.get[Vector[Int]]).map(_.length >= 10))
 }
 
 val thread2 = {
-  val mod = ThreadT.liftF(State.modify[Vector[Int]](_ :+ 1)) // >> ThreadT.cede(())
+  val mod = ThreadT.liftF(State.modify[Vector[Int]](_ :+ 1)) // >> ThreadT.cede
   mod.untilM_(ThreadT.liftF(State.get[Vector[Int]]).map(_.length >= 10))
 }
 
@@ -96,8 +96,8 @@ A `ApplicativeThread` typeclass, in the style of [Cats MTL](https://github.com/t
 
 ```scala
 def thread1[F[_]: Monad: ApplicativeThread](implicit F: MonadState[F, Vector[Int]]): F[Unit] = {
-  val mod = F.modify(_ :+ 0) >> ApplicativeThread[F].cede_
-  mod.untilM(F.get).map(_.length >= 10)
+  val mod = F.modify(_ :+ 0) >> ApplicativeThread[F].cede
+  mod.untilM(F.get.map(_.length >= 10))
 }
 
 def main[F[_]: Apply: ApplicativeThread](thread1: F[Unit], thread2: F[Unit]): F[Unit] =

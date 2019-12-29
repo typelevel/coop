@@ -26,9 +26,7 @@ trait ApplicativeThread[F[_]] extends Serializable {
 
   def fork[A](left: A, right: A): F[A]
 
-  def cede[A](results: A): F[A]
-
-  def cede_ : F[Unit] = cede(())
+  val cede: F[Unit]
 
   def done[A]: F[A]
 
@@ -52,8 +50,8 @@ object ApplicativeThread {
       def fork[A](left: A, right: A): FreeT[S, F, A] =
         FreeT.liftF(S(ThreadF.Fork(left, right)))
 
-      def cede[A](results: A): FreeT[S, F, A] =
-        FreeT.liftF(S(ThreadF.Cede(results)))
+      val cede: FreeT[S, F, Unit] =
+        FreeT.liftF(S(ThreadF.Cede(())))
 
       def done[A]: FreeT[S, F, A] =
         FreeT.liftF(S(ThreadF.Done))
@@ -71,8 +69,8 @@ object ApplicativeThread {
       def fork[A](left: A, right: A): Kleisli[F, R, A] =
         Kleisli.liftF(thread.fork(left, right))
 
-      def cede[A](results: A): Kleisli[F, R, A] =
-        Kleisli.liftF(thread.cede(results))
+      val cede: Kleisli[F, R, Unit] =
+        Kleisli.liftF(thread.cede)
 
       def done[A]: Kleisli[F, R, A] =
         Kleisli.liftF(thread.done[A])
@@ -92,8 +90,8 @@ object ApplicativeThread {
       def fork[A](left: A, right: A): EitherT[F, E, A] =
         EitherT.liftF(thread.fork(left, right))
 
-      def cede[A](results: A): EitherT[F, E, A] =
-        EitherT.liftF(thread.cede(results))
+      val cede: EitherT[F, E, Unit] =
+        EitherT.liftF(thread.cede)
 
       def done[A]: EitherT[F, E, A] =
         EitherT.liftF(thread.done[A])

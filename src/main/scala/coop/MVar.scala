@@ -30,7 +30,7 @@ final class MVar[A] private () { outer =>
   def read[F[_]: Monad: ApplicativeThread: MVar.Ask]: F[A] =
     tryRead[F] flatMap {
       case Some(a) => a.pure[F]
-      case None => ApplicativeThread[F].cede_ >> read[F]
+      case None => ApplicativeThread[F].cede >> read[F]
     }
 
   def tryPut[F[_]: Monad: MVar.Ask](a: A): F[Boolean] =
@@ -43,7 +43,7 @@ final class MVar[A] private () { outer =>
     }
 
   def put[F[_]: Monad: ApplicativeThread: MVar.Ask](a: A): F[Unit] =
-    tryPut[F](a).ifM(().pure[F], ApplicativeThread[F].cede_ >> put[F](a))
+    tryPut[F](a).ifM(().pure[F], ApplicativeThread[F].cede >> put[F](a))
 
   def tryTake[F[_]: Monad: MVar.Ask]: F[Option[A]] =
     getU[F] flatMap {
@@ -57,7 +57,7 @@ final class MVar[A] private () { outer =>
   def take[F[_]: Monad: ApplicativeThread: MVar.Ask]: F[A] =
     tryTake[F] flatMap {
       case Some(a) => a.pure[F]
-      case None => ApplicativeThread[F].cede_ >> take[F]
+      case None => ApplicativeThread[F].cede >> take[F]
     }
 
   def swap[F[_]: Monad: ApplicativeThread: MVar.Ask](a: A): F[A] =
@@ -66,7 +66,7 @@ final class MVar[A] private () { outer =>
         setU[F](a).as(oldA)
 
       case None =>
-        ApplicativeThread[F].cede_ >> swap[F](a)
+        ApplicativeThread[F].cede >> swap[F](a)
     }
 
   def apply[F[_]: Monad: ApplicativeThread: MVar.Ask]: MVarPartiallyApplied[F] =

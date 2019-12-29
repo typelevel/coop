@@ -30,8 +30,8 @@ object ThreadT {
   def fork[M[_]: Applicative, A](left: A, right: A): ThreadT[M, A] =
     FreeT.liftF[ThreadF, M, A](ThreadF.Fork(left, right))
 
-  def cede[M[_]: Applicative, A](results: A): ThreadT[M, A] =
-    FreeT.liftF[ThreadF, M, A](ThreadF.Cede(results))
+  def cede[M[_]: Applicative]: ThreadT[M, Unit] =
+    FreeT.liftF[ThreadF, M, Unit](ThreadF.Cede(()))
 
   def done[M[_]: Applicative, A]: ThreadT[M, A] =
     FreeT.liftF[ThreadF, M, A](ThreadF.Done)

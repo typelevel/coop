@@ -30,7 +30,7 @@ class ThreadTSpecs extends Specification {
 
       def writeRange(from: Int, to: Int): ThreadT[M, Unit] =
         from.until(to).toList traverse_ { i =>
-          ThreadT.liftF[M, Unit](WriterT.tell(i :: Nil)) >> ThreadT.cede(())
+          ThreadT.liftF[M, Unit](WriterT.tell(i :: Nil)) >> ThreadT.cede
         }
 
       val main = ThreadT.start(writeRange(0, 10)) >>
