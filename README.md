@@ -115,3 +115,15 @@ An experimental implementation of `MVar` is made available, mostly because it ma
 `UnsafeRef` is used rather than `StateT` or `InjectK[StateF[S, ?], F]` to avoid issues with `MonadError` instances in the stack. Additionally, as mentioned earlier, `ApplicativeThread` will not auto-derive over `StateT` due to issues with value loss, so all in all it's a better approach if we aren't going to use a `var`.
 
 All blocking operations are implemented as spin waits with interleaving `cede`s, ensuring that execution is not blocked. A more efficient implementation is possible by introducing the concept of a monitor in `ThreadF`, but efficiency is the *last* thing you should be worried about if you're using this library.
+
+## Monitors and Locks
+
+`ThreadT` implements a relatively basic form of await/notify locking as part of the core system. This takes the form of the following three constructors:
+
+- `ThreadT.monitor: ThreadT[M, MonitorId]`
+- `ThreadT.await(id: MonitorId): ThreadT[M, Unit]`
+- `ThreadT.notify(id: MonitorId): ThreadT[M, Unit]`
+
+Notification has "notify all" semantics. `MonitorId` is simply an opaque identifier which can be used for awaiting/notifying. Sequencing `await` places the current fiber into a locked state. Any number of fibers may be awaiting a given monitor at any time. Sequencing `notify` with a given monitor will reactivate all fibers that are locked on that monitor, in the order in which they `await`ed.
+
+This system exists in order to allow `roundRobin` to implement a form of deadlock detection. Rather than producing an `M[Unit]` from a `ThreadT[M, A]`, it actually produces an `M[Boolean]`, where the `Boolean` indicates whether or not all work was fully completed. If the produced value is `false`, then one or more monitors had awaiting fibers when the worker queue emptied, meaning that those fibers are deadlocked.
