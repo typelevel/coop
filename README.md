@@ -17,8 +17,8 @@ import coop.ThreadT
 import cats.effect.IO
 import cats.implicits._
 
-val thread1 = (ThreadT.liftF(IO(println("yo"))) >> ThreadT.cede.foreverM
-val thread2 = (ThreadT.liftF(IO(println("dawg"))) >> ThreadT.cede.foreverM
+val thread1 = (ThreadT.liftF(IO(println("yo"))) >> ThreadT.cede).foreverM
+val thread2 = (ThreadT.liftF(IO(println("dawg"))) >> ThreadT.cede).foreverM
 
 val main = ThreadT.start(thread1) >> ThreadT.start(thread2)
 
@@ -49,12 +49,12 @@ import cats.implicits._
 import scala.collection.immutable.Vector
 
 val thread1 = {
-  val mod = ThreadT.liftF(State.modify[Vector[Int]](_ :+ 0)) >> ThreadT.cede(())
+  val mod = ThreadT.liftF(State.modify[Vector[Int]](_ :+ 0)) >> ThreadT.cede
   mod.untilM_(ThreadT.liftF(State.get[Vector[Int]]).map(_.length >= 10))
 }
 
 val thread2 = {
-  val mod = ThreadT.liftF(State.modify[Vector[Int]](_ :+ 1)) >> ThreadT.cede(())
+  val mod = ThreadT.liftF(State.modify[Vector[Int]](_ :+ 1)) >> ThreadT.cede
   mod.untilM_(ThreadT.liftF(State.get[Vector[Int]]).map(_.length >= 10))
 }
 
