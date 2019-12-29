@@ -114,8 +114,6 @@ An experimental implementation of `MVar` is made available, mostly because it ma
 
 `UnsafeRef` is used rather than `StateT` or `InjectK[StateF[S, ?], F]` to avoid issues with `MonadError` instances in the stack. Additionally, as mentioned earlier, `ApplicativeThread` will not auto-derive over `StateT` due to issues with value loss, so all in all it's a better approach if we aren't going to use a `var`.
 
-All blocking operations are implemented as spin waits with interleaving `cede`s, ensuring that execution is not blocked. A more efficient implementation is possible by introducing the concept of a monitor in `ThreadF`, but efficiency is the *last* thing you should be worried about if you're using this library.
-
 ## Monitors and Locks
 
 `ThreadT` implements a relatively basic form of await/notify locking as part of the core system. This takes the form of the following three constructors:

@@ -16,7 +16,7 @@
 
 package coop
 
-import cats.Monoid
+import cats.{Eval, Monoid}
 import cats.data.{Kleisli, State}
 import cats.implicits._
 import cats.mtl.MonadState
@@ -124,6 +124,13 @@ class MVarSpecs extends Specification {
       val results = runToCompletionEmpty(eff)
 
       (results mustEqual ((Left(5), 8))) or (results mustEqual ((Right(8), 5)))
+    }
+
+    "detect a deadlock" in {
+      type F[A] = Kleisli[ThreadT[Eval, ?], MVar.Universe, A]
+
+      val eff = MVar.empty[F, Unit].flatMap(_.read[F])
+      ThreadT.roundRobin(MVar.resolve(eff)).value must beFalse
     }
   }
 

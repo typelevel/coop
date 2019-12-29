@@ -21,7 +21,9 @@ import cats.data.Kleisli
 import cats.implicits._
 import cats.mtl.ApplicativeAsk
 
-final class MVar[A] private () { outer =>
+import ThreadF.MonitorId
+
+final class MVar[A] private (monitor: MonitorId) { outer =>
 
   private[this] val Key = this.asInstanceOf[MVar[Any]]
 
@@ -30,10 +32,10 @@ final class MVar[A] private () { outer =>
   def read[F[_]: Monad: ApplicativeThread: MVar.Ask]: F[A] =
     tryRead[F] flatMap {
       case Some(a) => a.pure[F]
-      case None => ApplicativeThread[F].cede >> read[F]
+      case None => ApplicativeThread[F].await(monitor) >> read[F]
     }
 
-  def tryPut[F[_]: Monad: MVar.Ask](a: A): F[Boolean] =
+  def tryPut[F[_]: Monad: ApplicativeThread: MVar.Ask](a: A): F[Boolean] =
     getU[F] flatMap {
       case Some(_) =>
         false.pure[F]
@@ -43,9 +45,9 @@ final class MVar[A] private () { outer =>
     }
 
   def put[F[_]: Monad: ApplicativeThread: MVar.Ask](a: A): F[Unit] =
-    tryPut[F](a).ifM(().pure[F], ApplicativeThread[F].cede >> put[F](a))
+    tryPut[F](a).ifM(().pure[F], ApplicativeThread[F].await(monitor) >> put[F](a))
 
-  def tryTake[F[_]: Monad: MVar.Ask]: F[Option[A]] =
+  def tryTake[F[_]: Monad: ApplicativeThread: MVar.Ask]: F[Option[A]] =
     getU[F] flatMap {
       case Some(a) =>
         removeU[F].as(Some(a): Option[A])
@@ -57,7 +59,7 @@ final class MVar[A] private () { outer =>
   def take[F[_]: Monad: ApplicativeThread: MVar.Ask]: F[A] =
     tryTake[F] flatMap {
       case Some(a) => a.pure[F]
-      case None => ApplicativeThread[F].cede >> take[F]
+      case None => ApplicativeThread[F].await(monitor) >> take[F]
     }
 
   def swap[F[_]: Monad: ApplicativeThread: MVar.Ask](a: A): F[A] =
@@ -66,7 +68,7 @@ final class MVar[A] private () { outer =>
         setU[F](a).as(oldA)
 
       case None =>
-        ApplicativeThread[F].cede >> swap[F](a)
+        ApplicativeThread[F].await(monitor) >> swap[F](a)
     }
 
   def apply[F[_]: Monad: ApplicativeThread: MVar.Ask]: MVarPartiallyApplied[F] =
@@ -92,11 +94,13 @@ final class MVar[A] private () { outer =>
   private[this] def getU[F[_]: Functor: MVar.Ask]: F[Option[A]] =
     ApplicativeAsk[F, MVar.Universe].ask.map(_().get(Key).map(_.asInstanceOf[A]))
 
-  private[this] def setU[F[_]: Functor: MVar.Ask](a: A): F[Unit] =
-    ApplicativeAsk[F, MVar.Universe].ask.map(_() += (Key -> a.asInstanceOf[Any]))
+  private[this] def setU[F[_]: Monad: MVar.Ask: ApplicativeThread](a: A): F[Unit] =
+    ApplicativeAsk[F, MVar.Universe].ask.map(_() += (Key -> a.asInstanceOf[Any])) >>
+      ApplicativeThread[F].notify(monitor)
 
-  private[this] def removeU[F[_]: Functor: MVar.Ask]: F[Unit] =
-    ApplicativeAsk[F, MVar.Universe].ask.map(_() -= Key)
+  private[this] def removeU[F[_]: Monad: MVar.Ask: ApplicativeThread]: F[Unit] =
+    ApplicativeAsk[F, MVar.Universe].ask.map(_() -= Key) >>
+      ApplicativeThread[F].notify(monitor)
 }
 
 object MVar {
@@ -105,8 +109,8 @@ object MVar {
   type Universe = UnsafeRef[Map[MVar[Any], Any]]
   type Ask[F[_]] = ApplicativeAsk[F, Universe]
 
-  def empty[F[_]: Applicative, A]: F[MVar[A]] =
-    ().pure[F].map(_ => new MVar[A])   // not actually pure due to object identity, but whatevs
+  def empty[F[_]: Functor: ApplicativeThread, A]: F[MVar[A]] =
+    ApplicativeThread[F].monitor.map(new MVar[A](_))    // not actually pure due to object identity, but whatevs
 
   def apply[F[_]: Monad: ApplicativeThread: Ask, A](a: A): F[MVar[A]] =
     empty[F, A].flatMap(mv => mv.put[F](a).as(mv))
