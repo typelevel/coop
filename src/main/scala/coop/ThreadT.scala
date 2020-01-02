@@ -16,7 +16,7 @@
 
 package coop
 
-import cats.{Applicative, Functor, Monad, Show}
+import cats.{~>, Applicative, Functor, Monad, Show}
 import cats.free.FreeT
 import cats.implicits._
 
@@ -89,7 +89,10 @@ object ThreadT {
     loop(Some(main), Queue.empty, Map.empty)
   }
 
-  def prettyPrint[M[_]: Monad, A: Show](target: ThreadT[M, A]): M[String] = {
+  def prettyPrint[M[_]: Monad, A: Show](
+      target: ThreadT[M, A],
+      render: M ~> λ[α => Option[String]] = λ[M ~> λ[α => Option[String]]](_ => None))
+      : M[String] = {
     val TurnRight = "╰"
     val InverseTurnRight = "╭"
     val TurnDown = "╮"
@@ -112,10 +115,17 @@ object ThreadT {
     def drawId(id: MonitorId): String = "0x" + id.hashCode.toHexString.toUpperCase
 
     def loop(target: ThreadT[M, A], indent: Int, init: Boolean = false): M[String] = {
-      val junc = if (init) InverseTurnRight else Junction
+      val junc0 = if (init) InverseTurnRight else Junction
       val trailing = if (indent > 0) "\n" + drawIndent(indent, "") else ""
 
-      target.resume flatMap {
+      val resumed = target.resume
+
+      val (junc, front) = render(resumed) match {
+        case Some(str) => (Junction, drawIndent(indent, junc0 + " " + str) + "\n")
+        case None => (junc0, "")
+      }
+
+      val backM = resumed flatMap {
         case Left(Fork(left, right)) =>
           val leading = drawIndent(indent, junc + " Fork") + "\n" + drawIndent(indent, ForkStr)
 
@@ -149,6 +159,8 @@ object ThreadT {
         case Right(a) =>
           drawIndent(indent, TurnRight + " Pure " + a.show + trailing).pure[M]
       }
+
+      backM.map(front + _)
     }
 
     loop(target, 0, true)
