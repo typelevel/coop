@@ -16,7 +16,7 @@
 
 package coop
 
-import cats.{Applicative, Functor, Monad}
+import cats.{Applicative, Functor, Monad, Show}
 import cats.free.FreeT
 import cats.implicits._
 
@@ -87,5 +87,70 @@ object ThreadT {
       }
 
     loop(Some(main), Queue.empty, Map.empty)
+  }
+
+  def prettyPrint[M[_]: Monad, A: Show](target: ThreadT[M, A]): M[String] = {
+    val TurnRight = "╰"
+    val InverseTurnRight = "╭"
+    val TurnDown = "╮"
+    val Junction = "├"
+    val Line = "│"
+
+    val ForkStr = Line + " " + TurnRight + TurnDown
+    val Spacing = ForkStr.length - 2
+
+    def drawSpaces(num: Int): String =
+      (0 until num).map(_ => ' ').mkString
+
+    def drawIndent(level: Int, term: String): String = {
+      if (level > 0)
+        Line + drawSpaces(Spacing) + drawIndent(level - 1, term)
+      else
+        term
+    }
+
+    def drawId(id: MonitorId): String = "0x" + id.hashCode.toHexString.toUpperCase
+
+    def loop(target: ThreadT[M, A], indent: Int, init: Boolean = false): M[String] = {
+      val junc = if (init) InverseTurnRight else Junction
+      val trailing = if (indent > 0) "\n" + drawIndent(indent, "") else ""
+
+      target.resume flatMap {
+        case Left(Fork(left, right)) =>
+          val leading = drawIndent(indent, junc + " Fork") + "\n" + drawIndent(indent, ForkStr)
+
+          for {
+            rightStr <- loop(right, indent + 1)
+            leftStr <- loop(left, indent)
+          } yield leading + "\n" + rightStr + "\n" + leftStr
+
+        case Left(Cede(results)) =>
+          loop(results, indent) map { nextStr =>
+            drawIndent(indent, junc + " Cede") + "\n" + nextStr
+          }
+
+        case Left(Done) =>
+          drawIndent(indent, TurnRight + " Done" + trailing).pure[M]
+
+        case Left(Monitor(f)) =>
+          val id = new MonitorId
+          loop(f(id), indent)   // don't render the creation
+
+        case Left(Await(id, results)) =>
+          loop(results, indent) map { nextStr =>
+            drawIndent(indent, junc + " Await ") + drawId(id) + "\n" + nextStr
+          }
+
+        case Left(Notify(id, results)) =>
+          loop(results, indent) map { nextStr =>
+            drawIndent(indent, junc + " Notify ") + drawId(id) + "\n" + nextStr
+          }
+
+        case Right(a) =>
+          drawIndent(indent, TurnRight + " Pure " + a.show + trailing).pure[M]
+      }
+    }
+
+    loop(target, 0, true)
   }
 }
