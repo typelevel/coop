@@ -144,7 +144,7 @@ object ThreadT {
 
         case Left(Monitor(f)) =>
           val id = new MonitorId
-          loop(f(id), indent)   // don't render the creation
+          loop(f(id), indent, init)   // don't render the creation
 
         case Left(Await(id, results)) =>
           loop(results, indent) map { nextStr =>
