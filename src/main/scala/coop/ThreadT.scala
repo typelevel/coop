@@ -56,7 +56,7 @@ object ThreadT {
         work: Queue[ThreadT[M, _]],
         locks: Map[MonitorId, Queue[ThreadT[M, _]]])
         : M[Boolean] =
-      head.map(h => (h, work)).orElse(work.dequeueOption) match {
+      head.tupleRight(work).orElse(work.dequeueOption) match {
         case Some((head, tail)) =>
           head.resume flatMap {
             case Left(Fork(left, right)) =>
