@@ -51,42 +51,44 @@ object ThreadT {
 
   def roundRobin[M[_]: Monad, A](main: ThreadT[M, A]): M[Boolean] = {
     // we maintain a separate head just to avoid queue prepending
-    def loop(
+    case class LoopState(
         head: Option[ThreadT[M, _]],
         work: Queue[ThreadT[M, _]],
         locks: Map[MonitorId, Queue[ThreadT[M, _]]])
-        : M[Boolean] =
+
+    Monad[M].tailRecM(LoopState(Some(main), Queue.empty, Map.empty)) { ls =>
+      val LoopState(head, work, locks) = ls
+
       head.tupleRight(work).orElse(work.dequeueOption) match {
         case Some((head, tail)) =>
-          head.resume flatMap {
+          head.resume map {
             case Left(Fork(left, right)) =>
-              loop(Some(left), tail.enqueue(right), locks)
+              Left(LoopState(Some(left), tail.enqueue(right), locks))
 
             case Left(Cede(results)) =>
-              loop(None, tail.enqueue(results), locks)
+              Left(LoopState(None, tail.enqueue(results), locks))
 
             case Left(Done) | Right(_) =>
-              loop(None, tail, locks)
+              Left(LoopState(None, tail, locks))
 
             case Left(Monitor(f)) =>
               val id = new MonitorId()
-              loop(Some(f(id)), tail, locks + (id -> Queue.empty))
+              Left(LoopState(Some(f(id)), tail, locks + (id -> Queue.empty)))
 
             case Left(Await(id, results)) =>
-              loop(None, tail, locks.updated(id, locks(id).enqueue(results)))
+              Left(LoopState(None, tail, locks.updated(id, locks(id).enqueue(results))))
 
             case Left(Notify(id, results)) =>
               // enqueueAll was added in 2.13
               val tail2 = locks(id).foldLeft(tail)(_.enqueue(_))
-              loop(None, tail2.enqueue(results), locks.updated(id, Queue.empty))
+              Left(LoopState(None, tail2.enqueue(results), locks.updated(id, Queue.empty)))
           }
 
         // if we have outstanding awaits but no active fibers, then we're deadlocked
         case None =>
-          locks.forall(_._2.isEmpty).pure[M]
+          locks.forall(_._2.isEmpty).asRight[LoopState].pure[M]
       }
-
-    loop(Some(main), Queue.empty, Map.empty)
+    }
   }
 
   def prettyPrint[M[_]: Monad, A: Show](
