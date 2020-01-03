@@ -116,55 +116,59 @@ object ThreadT {
 
     def drawId(id: MonitorId): String = "0x" + id.hashCode.toHexString.toUpperCase
 
-    def loop(target: ThreadT[M, A], indent: Int, init: Boolean = false): M[String] = {
-      val junc0 = if (init) InverseTurnRight else Junction
-      val trailing = if (indent > 0) "\n" + drawIndent(indent, "") else ""
+    case class LoopState(target: ThreadT[M, A], acc: String, indent: Int, init: Boolean = false)
 
-      val resumed = target.resume
+    def loop(target: ThreadT[M, A], acc: String, indent: Int, init: Boolean): M[String] = {
+      Monad[M].tailRecM(LoopState(target, acc, indent, init)) { ls =>
+        val LoopState(target, acc0, indent, init) = ls
 
-      val (junc, front) = render(resumed) match {
-        case Some(str) => (Junction, drawIndent(indent, junc0 + " " + str) + "\n")
-        case None => (junc0, "")
+        val junc0 = if (init) InverseTurnRight else Junction
+        val trailing = if (indent > 0) "\n" + drawIndent(indent, "") else ""
+
+        val resumed = target.resume
+
+        val (junc, front) = render(resumed) match {
+          case Some(str) => (Junction, drawIndent(indent, junc0 + " " + str) + "\n")
+          case None => (junc0, "")
+        }
+
+        val acc = acc0 + front
+
+        // stack is still proportional to the number of forked fibers, but not the number of binds
+        resumed flatMap {
+          case Left(Fork(left, right)) =>
+            val leading = drawIndent(indent, junc + " Fork") + "\n" + drawIndent(indent, ForkStr)
+
+            loop(right, "", indent + 1, false) map { rightStr =>
+              val acc2 = acc + leading + "\n" + rightStr + "\n"
+              LoopState(left, acc2, indent, false).asLeft[String]
+            }
+
+          case Left(Cede(results)) =>
+            val acc2 = acc + drawIndent(indent, junc + " Cede") + "\n"
+            LoopState(results, acc2, indent, false).asLeft[String].pure[M]
+
+          case Left(Done) =>
+            (acc + drawIndent(indent, TurnRight + " Done" + trailing)).asRight[LoopState].pure[M]
+
+          case Left(Monitor(f)) =>
+            val id = new MonitorId
+            LoopState(f(id), acc, indent, init).asLeft[String].pure[M]   // don't render the creation
+
+          case Left(Await(id, results)) =>
+            val acc2 = acc + drawIndent(indent, junc + " Await ") + drawId(id) + "\n"
+            LoopState(results, acc2, indent, false).asLeft[String].pure[M]
+
+          case Left(Notify(id, results)) =>
+            val acc2 = acc + drawIndent(indent, junc + " Await ") + drawId(id) + "\n"
+            LoopState(results, acc2, indent, false).asLeft[String].pure[M]
+
+          case Right(a) =>
+            (acc + drawIndent(indent, TurnRight + " Pure " + a.show + trailing)).asRight[LoopState].pure[M]
+        }
       }
-
-      val backM = resumed flatMap {
-        case Left(Fork(left, right)) =>
-          val leading = drawIndent(indent, junc + " Fork") + "\n" + drawIndent(indent, ForkStr)
-
-          for {
-            rightStr <- loop(right, indent + 1)
-            leftStr <- loop(left, indent)
-          } yield leading + "\n" + rightStr + "\n" + leftStr
-
-        case Left(Cede(results)) =>
-          loop(results, indent) map { nextStr =>
-            drawIndent(indent, junc + " Cede") + "\n" + nextStr
-          }
-
-        case Left(Done) =>
-          drawIndent(indent, TurnRight + " Done" + trailing).pure[M]
-
-        case Left(Monitor(f)) =>
-          val id = new MonitorId
-          loop(f(id), indent, init)   // don't render the creation
-
-        case Left(Await(id, results)) =>
-          loop(results, indent) map { nextStr =>
-            drawIndent(indent, junc + " Await ") + drawId(id) + "\n" + nextStr
-          }
-
-        case Left(Notify(id, results)) =>
-          loop(results, indent) map { nextStr =>
-            drawIndent(indent, junc + " Notify ") + drawId(id) + "\n" + nextStr
-          }
-
-        case Right(a) =>
-          drawIndent(indent, TurnRight + " Pure " + a.show + trailing).pure[M]
-      }
-
-      backM.map(front + _)
     }
 
-    loop(target, 0, true)
+    loop(target, "", 0, true)
   }
 }
