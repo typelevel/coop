@@ -93,7 +93,8 @@ object ThreadT {
 
   def prettyPrint[M[_]: Monad, A: Show](
       target: ThreadT[M, A],
-      render: M ~> λ[α => Option[String]] = λ[M ~> λ[α => Option[String]]](_ => None))
+      render: M ~> λ[α => Option[String]] = λ[M ~> λ[α => Option[String]]](_ => None),
+      limit: Int = 512)   // sanity limit on the number of bytes allowed in the output
       : M[String] = {
     val TurnRight = "╰"
     val InverseTurnRight = "╭"
@@ -134,37 +135,41 @@ object ThreadT {
 
         val acc = acc0 + front
 
-        // stack is still proportional to the number of forked fibers, but not the number of binds
-        resumed flatMap {
-          case Left(Fork(left, right)) =>
-            val leading = drawIndent(indent, junc + " Fork") + "\n" + drawIndent(indent, ForkStr)
+        if (acc.length >= limit) {
+          (acc + "\n...").asRight[LoopState].pure[M]
+        } else {
+          // stack is still proportional to the number of forked fibers, but not the number of binds
+          resumed flatMap {
+            case Left(Fork(left, right)) =>
+              val leading = drawIndent(indent, junc + " Fork") + "\n" + drawIndent(indent, ForkStr)
 
-            loop(right, "", indent + 1, false) map { rightStr =>
-              val acc2 = acc + leading + "\n" + rightStr + "\n"
-              LoopState(left, acc2, indent, false).asLeft[String]
-            }
+              loop(right, "", indent + 1, false) map { rightStr =>
+                val acc2 = acc + leading + "\n" + rightStr + "\n"
+                LoopState(left, acc2, indent, false).asLeft[String]
+              }
 
-          case Left(Cede(results)) =>
-            val acc2 = acc + drawIndent(indent, junc + " Cede") + "\n"
-            LoopState(results, acc2, indent, false).asLeft[String].pure[M]
+            case Left(Cede(results)) =>
+              val acc2 = acc + drawIndent(indent, junc + " Cede") + "\n"
+              LoopState(results, acc2, indent, false).asLeft[String].pure[M]
 
-          case Left(Done) =>
-            (acc + drawIndent(indent, TurnRight + " Done" + trailing)).asRight[LoopState].pure[M]
+            case Left(Done) =>
+              (acc + drawIndent(indent, TurnRight + " Done" + trailing)).asRight[LoopState].pure[M]
 
-          case Left(Monitor(f)) =>
-            val id = new MonitorId
-            LoopState(f(id), acc, indent, init).asLeft[String].pure[M]   // don't render the creation
+            case Left(Monitor(f)) =>
+              val id = new MonitorId
+              LoopState(f(id), acc, indent, init).asLeft[String].pure[M]   // don't render the creation
 
-          case Left(Await(id, results)) =>
-            val acc2 = acc + drawIndent(indent, junc + " Await ") + drawId(id) + "\n"
-            LoopState(results, acc2, indent, false).asLeft[String].pure[M]
+            case Left(Await(id, results)) =>
+              val acc2 = acc + drawIndent(indent, junc + " Await ") + drawId(id) + "\n"
+              LoopState(results, acc2, indent, false).asLeft[String].pure[M]
 
-          case Left(Notify(id, results)) =>
-            val acc2 = acc + drawIndent(indent, junc + " Await ") + drawId(id) + "\n"
-            LoopState(results, acc2, indent, false).asLeft[String].pure[M]
+            case Left(Notify(id, results)) =>
+              val acc2 = acc + drawIndent(indent, junc + " Await ") + drawId(id) + "\n"
+              LoopState(results, acc2, indent, false).asLeft[String].pure[M]
 
-          case Right(a) =>
-            (acc + drawIndent(indent, TurnRight + " Pure " + a.show + trailing)).asRight[LoopState].pure[M]
+            case Right(a) =>
+              (acc + drawIndent(indent, TurnRight + " Pure " + a.show + trailing)).asRight[LoopState].pure[M]
+          }
         }
       }
     }
