@@ -16,7 +16,7 @@
 
 name := "coop"
 
-ThisBuild / baseVersion := "0.2"
+ThisBuild / baseVersion := "0.3"
 
 ThisBuild / organization := "com.codecommit"
 ThisBuild / publishGithubUser := "djspiewak"
