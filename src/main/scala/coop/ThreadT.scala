@@ -164,7 +164,7 @@ object ThreadT {
               LoopState(results, acc2, indent, false).asLeft[String].pure[M]
 
             case Left(Notify(id, results)) =>
-              val acc2 = acc + drawIndent(indent, junc + " Await ") + drawId(id) + "\n"
+              val acc2 = acc + drawIndent(indent, junc + " Notify ") + drawId(id) + "\n"
               LoopState(results, acc2, indent, false).asLeft[String].pure[M]
 
             case Right(a) =>
