@@ -28,11 +28,11 @@ object ThreadT {
   def liftF[M[_]: Functor, A](ma: M[A]): ThreadT[M, A] =
     FreeT.liftT[ThreadF, M, A](ma)
 
-  def fork[M[_]: Applicative, A](left: A, right: A): ThreadT[M, A] =
-    FreeT.liftF[ThreadF, M, A](Fork(left, right))
+  def fork[M[_]: Applicative, A](left: => A, right: => A): ThreadT[M, A] =
+    FreeT.liftF[ThreadF, M, A](Fork(() => left, () => right))
 
   def cede[M[_]: Applicative]: ThreadT[M, Unit] =
-    FreeT.liftF[ThreadF, M, Unit](Cede(()))
+    FreeT.liftF[ThreadF, M, Unit](Cede(() => ()))
 
   def done[M[_]: Applicative, A]: ThreadT[M, A] =
     FreeT.liftF[ThreadF, M, A](Done)
@@ -41,10 +41,10 @@ object ThreadT {
     FreeT.liftF[ThreadF, M, MonitorId](Monitor(m => m))
 
   def await[M[_]: Applicative](id: MonitorId): ThreadT[M, Unit] =
-    FreeT.liftF[ThreadF, M, Unit](Await(id, ()))
+    FreeT.liftF[ThreadF, M, Unit](Await(id, () => ()))
 
   def notify[M[_]: Applicative](id: MonitorId): ThreadT[M, Unit] =
-    FreeT.liftF[ThreadF, M, Unit](Notify(id, ()))
+    FreeT.liftF[ThreadF, M, Unit](Notify(id, () => ()))
 
   def start[M[_]: Applicative, A](child: ThreadT[M, A]): ThreadT[M, Unit] =
     fork[M, Boolean](false, true).ifM(child >> done[M, Unit], ().pure[ThreadT[M, ?]])
@@ -52,28 +52,29 @@ object ThreadT {
   def roundRobin[M[_]: Monad, A](main: ThreadT[M, A]): M[Boolean] = {
     // we maintain a separate head just to avoid queue prepending
     case class LoopState(
-        head: Option[ThreadT[M, _]],
-        work: Queue[ThreadT[M, _]],
-        locks: Map[MonitorId, Queue[ThreadT[M, _]]])
+        head: Option[() => ThreadT[M, _]],
+        work: Queue[() => ThreadT[M, _]],
+        locks: Map[MonitorId, Queue[() => ThreadT[M, _]]])
 
-    Monad[M].tailRecM(LoopState(Some(main), Queue.empty, Map.empty)) { ls =>
+    Monad[M].tailRecM(LoopState(Some(() => main), Queue.empty, Map.empty)) { ls =>
       val LoopState(head, work, locks) = ls
 
       head.tupleRight(work).orElse(work.dequeueOption) match {
         case Some((head, tail)) =>
-          head.resume map {
+          head().resume map {
             case Left(Fork(left, right)) =>
               Left(LoopState(Some(left), tail.enqueue(right), locks))
 
             case Left(Cede(results)) =>
-              Left(LoopState(None, tail.enqueue(results), locks))
+              val tail2 = tail.enqueue(results)
+              Left(LoopState(None, tail2, locks))
 
             case Left(Done) | Right(_) =>
               Left(LoopState(None, tail, locks))
 
             case Left(Monitor(f)) =>
               val id = new MonitorId()
-              Left(LoopState(Some(f(id)), tail, locks + (id -> Queue.empty)))
+              Left(LoopState(Some(() => f(id)), tail, locks + (id -> Queue.empty)))
 
             case Left(Await(id, results)) =>
               Left(LoopState(None, tail, locks.updated(id, locks(id).enqueue(results))))
@@ -143,14 +144,14 @@ object ThreadT {
             case Left(Fork(left, right)) =>
               val leading = drawIndent(indent, junc + " Fork") + "\n" + drawIndent(indent, ForkStr)
 
-              loop(right, "", indent + 1, false) map { rightStr =>
+              loop(right(), "", indent + 1, false) map { rightStr =>
                 val acc2 = acc + leading + "\n" + rightStr + "\n"
-                LoopState(left, acc2, indent, false).asLeft[String]
+                LoopState(left(), acc2, indent, false).asLeft[String]
               }
 
             case Left(Cede(results)) =>
               val acc2 = acc + drawIndent(indent, junc + " Cede") + "\n"
-              LoopState(results, acc2, indent, false).asLeft[String].pure[M]
+              LoopState(results(), acc2, indent, false).asLeft[String].pure[M]
 
             case Left(Done) =>
               (acc + drawIndent(indent, TurnRight + " Done" + trailing)).asRight[LoopState].pure[M]
@@ -161,11 +162,11 @@ object ThreadT {
 
             case Left(Await(id, results)) =>
               val acc2 = acc + drawIndent(indent, junc + " Await ") + drawId(id) + "\n"
-              LoopState(results, acc2, indent, false).asLeft[String].pure[M]
+              LoopState(results(), acc2, indent, false).asLeft[String].pure[M]
 
             case Left(Notify(id, results)) =>
               val acc2 = acc + drawIndent(indent, junc + " Notify ") + drawId(id) + "\n"
-              LoopState(results, acc2, indent, false).asLeft[String].pure[M]
+              LoopState(results(), acc2, indent, false).asLeft[String].pure[M]
 
             case Right(a) =>
               (acc + drawIndent(indent, TurnRight + " Pure " + a.show + trailing)).asRight[LoopState].pure[M]

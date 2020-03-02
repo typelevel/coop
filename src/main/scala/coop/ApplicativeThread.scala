@@ -26,7 +26,7 @@ import ThreadF.MonitorId
 trait ApplicativeThread[F[_]] extends Serializable {
   val applicative: Applicative[F]
 
-  def fork[A](left: A, right: A): F[A]
+  def fork[A](left: => A, right: => A): F[A]
 
   val cede: F[Unit]
 
@@ -55,11 +55,11 @@ object ApplicativeThread {
 
       val applicative = Applicative[FreeT[S, F, ?]]
 
-      def fork[A](left: A, right: A): FreeT[S, F, A] =
-        FreeT.liftF(S(ThreadF.Fork(left, right)))
+      def fork[A](left: => A, right: => A): FreeT[S, F, A] =
+        FreeT.liftF(S(ThreadF.Fork(() => left, () => right)))
 
       val cede: FreeT[S, F, Unit] =
-        FreeT.liftF(S(ThreadF.Cede(())))
+        FreeT.liftF(S(ThreadF.Cede(() => ())))
 
       def done[A]: FreeT[S, F, A] =
         FreeT.liftF(S(ThreadF.Done))
@@ -68,10 +68,10 @@ object ApplicativeThread {
         FreeT.liftF(S(ThreadF.Monitor(m => m)))
 
       def await(id: MonitorId): FreeT[S, F, Unit] =
-        FreeT.liftF(S(ThreadF.Await(id, ())))
+        FreeT.liftF(S(ThreadF.Await(id, () => ())))
 
       def notify(id: MonitorId): FreeT[S, F, Unit] =
-        FreeT.liftF(S(ThreadF.Notify(id, ())))
+        FreeT.liftF(S(ThreadF.Notify(id, () => ())))
 
       def start[A](child: FreeT[S, F, A]): FreeT[S, F, Unit] =
         fork(false, true).ifM(child.void >> done[Unit], ().pure[FreeT[S, F, ?]])
@@ -83,7 +83,7 @@ object ApplicativeThread {
 
       val applicative = Applicative[Kleisli[F, R, ?]]
 
-      def fork[A](left: A, right: A): Kleisli[F, R, A] =
+      def fork[A](left: => A, right: => A): Kleisli[F, R, A] =
         Kleisli.liftF(thread.fork(left, right))
 
       val cede: Kleisli[F, R, Unit] =
@@ -113,7 +113,7 @@ object ApplicativeThread {
 
       val applicative = Applicative[EitherT[F, E, ?]]
 
-      def fork[A](left: A, right: A): EitherT[F, E, A] =
+      def fork[A](left: => A, right: => A): EitherT[F, E, A] =
         EitherT.liftF(thread.fork(left, right))
 
       val cede: EitherT[F, E, Unit] =

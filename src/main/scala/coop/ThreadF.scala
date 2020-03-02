@@ -24,23 +24,23 @@ object ThreadF {
 
   implicit val functor: Functor[ThreadF] = new Functor[ThreadF] {
     def map[A, B](fa: ThreadF[A])(f: A => B): ThreadF[B] = fa match {
-      case Fork(left, right) => Fork(f(left), f(right))
-      case Cede(result) => Cede(f(result))
+      case Fork(left, right) => Fork(() => f(left()), () => f(right()))
+      case Cede(results) => Cede(() => f(results()))
       case Done => Done
 
       case Monitor(body) => Monitor(body.andThen(f))
-      case Await(id, results) => Await(id, f(results))
-      case Notify(id, results) => Notify(id, f(results))
+      case Await(id, results) => Await(id, () => f(results()))
+      case Notify(id, results) => Notify(id, () => f(results()))
     }
   }
 
-  final case class Fork[A](left: A, right: A) extends ThreadF[A]
-  final case class Cede[A](result: A) extends ThreadF[A]
+  final case class Fork[A](left: () => A, right: () => A) extends ThreadF[A]
+  final case class Cede[A](results: () => A) extends ThreadF[A]
   case object Done extends ThreadF[Nothing]
 
   final case class Monitor[A](body: MonitorId => A) extends ThreadF[A]
-  final case class Await[A](id: MonitorId, results: A) extends ThreadF[A]
-  final case class Notify[A](id: MonitorId, results: A) extends ThreadF[A]
+  final case class Await[A](id: MonitorId, results: () => A) extends ThreadF[A]
+  final case class Notify[A](id: MonitorId, results: () => A) extends ThreadF[A]
 
   // an opaque fresh id
   final class MonitorId private[coop] ()
