@@ -1,6 +1,6 @@
 # coop
 
-Based on http://www.haskellforall.com/2013/06/from-zero-to-cooperative-threads-in-33.html?m=1 All credit to Gabriel Gonzales. The minor API and implementation differences from his Haskell version are due to Scala being Scala, and not any sign of original thought on my part.
+Based on http://www.haskellforall.com/2013/06/from-zero-to-cooperative-threads-in-33.html*m=1 All credit to Gabriel Gonzales. The minor API and implementation differences from his Haskell version are due to Scala being Scala, and not any sign of original thought on my part.
 
 ...okay I take that back. The implementation of monitors is original, but it's so obvious that I'm not sure it counts as anything to take credit for.
 
@@ -106,7 +106,7 @@ def main[F[_]: Apply: ApplicativeThread](thread1: F[Unit], thread2: F[Unit]): F[
   ApplicativeThread[F].start(thread1) *> ApplicativeThread[F].start(thread2)
 ```
 
-`ApplicativeThread` will inductively derive over `Kleisli` and `EitherT`, and defines a base instance for `FreeT[S[_], F[_], ?]` given an `InjectK[ThreadF, S]` (so, strictly more general than just `ThreadT` itself). It notably will not auto-derive over `StateT` or `WriterT`, due to the value loss which occurs in `fork`/`start`. If you need `StateT`-like functionality, it is recommended you either include some sort of `StateF` in your `FreeT` suspension, or nest the `State` functionality *within* the `FreeT`.
+`ApplicativeThread` will inductively derive over `Kleisli` and `EitherT`, and defines a base instance for `FreeT[S[_], F[_], *]` given an `InjectK[ThreadF, S]` (so, strictly more general than just `ThreadT` itself). It notably will not auto-derive over `StateT` or `WriterT`, due to the value loss which occurs in `fork`/`start`. If you need `StateT`-like functionality, it is recommended you either include some sort of `StateF` in your `FreeT` suspension, or nest the `State` functionality *within* the `FreeT`.
 
 You will probably want to `import FreeTInstances._` to ensure that the appropriate Cats MTL machinery for `FreeT` itself is made available in scope, otherwise instances will not propagate correctly across `FreeT` in the transformer stack. This machinery is probably going to get contributed upstream into a Cats MTL submodule.
 
@@ -114,7 +114,7 @@ You will probably want to `import FreeTInstances._` to ensure that the appropria
 
 An experimental implementation of `MVar` is made available, mostly because it makes it theoretically possible to define all the things. The API mirrors Haskell's. The implementation assumes an `ApplicativeAsk` (from Cats MTL) of an `UnsafeRef` which contains the uniquely indexed state for every `MVar`. This could have just been done using a private `var` instead, but I wanted to be explicit about the state management.
 
-`UnsafeRef` is used rather than `StateT` or `InjectK[StateF[S, ?], F]` to avoid issues with `MonadError` instances in the stack. Additionally, as mentioned earlier, `ApplicativeThread` will not auto-derive over `StateT` due to issues with value loss, so all in all it's a better approach if we aren't going to use a `var`.
+`UnsafeRef` is used rather than `StateT` or `InjectK[StateF[S, *], F]` to avoid issues with `MonadError` instances in the stack. Additionally, as mentioned earlier, `ApplicativeThread` will not auto-derive over `StateT` due to issues with value loss, so all in all it's a better approach if we aren't going to use a `var`.
 
 ## Monitors and Locks
 

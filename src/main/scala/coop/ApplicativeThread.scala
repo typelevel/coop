@@ -50,10 +50,10 @@ object ApplicativeThread {
       F[_]: Applicative,
       S[_]](
       implicit S: InjectK[ThreadF, S])
-      : ApplicativeThread[FreeT[S, F, ?]] =
-    new ApplicativeThread[FreeT[S, F, ?]] {
+      : ApplicativeThread[FreeT[S, F, *]] =
+    new ApplicativeThread[FreeT[S, F, *]] {
 
-      val applicative = Applicative[FreeT[S, F, ?]]
+      val applicative = Applicative[FreeT[S, F, *]]
 
       def fork[A](left: => A, right: => A): FreeT[S, F, A] =
         FreeT.liftF(S(ThreadF.Fork(() => left, () => right)))
@@ -74,14 +74,14 @@ object ApplicativeThread {
         FreeT.liftF(S(ThreadF.Notify(id, () => ())))
 
       def start[A](child: FreeT[S, F, A]): FreeT[S, F, Unit] =
-        fork(false, true).ifM(child.void >> done[Unit], ().pure[FreeT[S, F, ?]])
+        fork(false, true).ifM(child.void >> done[Unit], ().pure[FreeT[S, F, *]])
     }
 
-  implicit def forKleisli[F[_]: Monad: ApplicativeThread, R]: ApplicativeThread[Kleisli[F, R, ?]] =
-    new ApplicativeThread[Kleisli[F, R, ?]] {
+  implicit def forKleisli[F[_]: Monad: ApplicativeThread, R]: ApplicativeThread[Kleisli[F, R, *]] =
+    new ApplicativeThread[Kleisli[F, R, *]] {
       private val thread = ApplicativeThread[F]
 
-      val applicative = Applicative[Kleisli[F, R, ?]]
+      val applicative = Applicative[Kleisli[F, R, *]]
 
       def fork[A](left: => A, right: => A): Kleisli[F, R, A] =
         Kleisli.liftF(thread.fork(left, right))
@@ -107,11 +107,11 @@ object ApplicativeThread {
         }
     }
 
-  implicit def forEitherT[F[_]: Monad: ApplicativeThread, E]: ApplicativeThread[EitherT[F, E, ?]] =
-    new ApplicativeThread[EitherT[F, E, ?]] {
+  implicit def forEitherT[F[_]: Monad: ApplicativeThread, E]: ApplicativeThread[EitherT[F, E, *]] =
+    new ApplicativeThread[EitherT[F, E, *]] {
       private val thread = ApplicativeThread[F]
 
-      val applicative = Applicative[EitherT[F, E, ?]]
+      val applicative = Applicative[EitherT[F, E, *]]
 
       def fork[A](left: => A, right: => A): EitherT[F, E, A] =
         EitherT.liftF(thread.fork(left, right))

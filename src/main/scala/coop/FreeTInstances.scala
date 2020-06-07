@@ -16,37 +16,18 @@
 
 package coop
 
-import cats.{~>, Functor, Monad}
+import cats.Monad
 import cats.free.FreeT
-import cats.mtl.lifting.MonadLayerControl
+import cats.mtl.MonadPartialOrder
 
-import scala.util.Either
-
-// TODO where does this belong? cats-mtl?
 object FreeTInstances {
 
-  implicit def freeTMonadLayerControl[S[_]: Functor, M[_]: Monad]
-      : MonadLayerControl.Aux[FreeT[S, M, ?], M, λ[α => Either[S[FreeT[S, M, α]], α]]] =
-    new MonadLayerControl[FreeT[S, M, ?], M] {
-      type State[A] = Either[S[FreeT[S, M, A]], A]
-
-      val outerInstance: Monad[FreeT[S, M, ?]] =
-        FreeT.catsFreeMonadForFreeT
-
-      val innerInstance: Monad[M] = Monad[M]
-
-      def layerMapK[A](ma: FreeT[S, M, A])(trans: M ~> M): FreeT[S, M, A] =
-        ma.mapK(trans)
-
-      def layer[A](inner: M[A]): FreeT[S, M, A] =
-        FreeT.liftT(inner)
-
-      def restore[A](state: State[A]): FreeT[S, M, A] =
-        state.fold(FreeT.roll(_), FreeT.pure(_))
-
-      def layerControl[A](cps: (FreeT[S, M, ?] ~> λ[α => M[State[α]]]) => M[A]): FreeT[S, M, A] =
-        FreeT.liftT(cps(λ[FreeT[S, M, ?] ~> λ[α => M[State[α]]]](_.resume)))
-
-      def zero[A](state: State[A]): Boolean = false
+  implicit def monadPartialOrderForFreeT[F[_], M[_], S](
+      implicit M: Monad[M])
+      : MonadPartialOrder[M, FreeT[F, M, *]] =
+    new MonadPartialOrder[M, FreeT[F, M, *]] {
+      val monadF = M
+      val monadG = FreeT.catsFreeMonadForFreeT[F, M]
+      def apply[A](fa: M[A]) = FreeT.liftT(fa)
     }
 }

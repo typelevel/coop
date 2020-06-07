@@ -24,13 +24,19 @@ ThisBuild / publishFullName := "Daniel Spiewak"
 
 ThisBuild / strictSemVer := false
 
+ThisBuild / crossScalaVersions := Seq("2.12.11", "0.24.0-RC1", "2.13.2")
+
+ThisBuild / githubWorkflowJavaVersions := Seq("adopt@1.8", "adopt@11", "adopt@14", "graalvm@20.1.0")
+ThisBuild / githubWorkflowBuild := WorkflowStep.Sbt(List("ci"))
+ThisBuild / githubWorkflowPublishTargetBranches := Seq()    // disable the publication job
+
 libraryDependencies ++= Seq(
-  "org.typelevel" %% "cats-free"     % "2.1.0",
-  "org.typelevel" %% "cats-mtl-core" % "0.7.0",
+  "org.typelevel" %% "cats-free" % "2.1.0",
+  "org.typelevel" %% "cats-mtl"  % "1.0-9b8941d",
 
   "org.specs2" %% "specs2-core" % "4.8.1" % Test)
 
-addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.1")
+libraryDependencies := libraryDependencies.value.map(_.withDottyCompat(scalaVersion.value))
 
 Global / homepage := Some(url("https://github.com/djspiewak/coop"))
 

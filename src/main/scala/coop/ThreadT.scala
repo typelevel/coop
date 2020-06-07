@@ -47,7 +47,7 @@ object ThreadT {
     FreeT.liftF[ThreadF, M, Unit](Notify(id, () => ()))
 
   def start[M[_]: Applicative, A](child: ThreadT[M, A]): ThreadT[M, Unit] =
-    fork[M, Boolean](false, true).ifM(child >> done[M, Unit], ().pure[ThreadT[M, ?]])
+    fork[M, Boolean](false, true).ifM(child >> done[M, Unit], ().pure[ThreadT[M, *]])
 
   def roundRobin[M[_]: Monad, A](main: ThreadT[M, A]): M[Boolean] = {
     // we maintain a separate head just to avoid queue prepending

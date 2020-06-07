@@ -19,26 +19,25 @@ package coop
 import cats.{Eval, Monoid}
 import cats.data.{Kleisli, State}
 import cats.implicits._
-import cats.mtl.MonadState
-import cats.mtl.implicits._
+import cats.mtl.Stateful
 
 import org.specs2.mutable.Specification
 
 class MVarSpecs extends Specification {
   import FreeTInstances._
 
-  type F[S, A] = Kleisli[ThreadT[State[S, ?], ?], MVar.Universe, A]
+  type F[S, A] = Kleisli[ThreadT[State[S, *], *], MVar.Universe, A]
 
   "mvar" should {
     "put and read values" in {
       val eff = for {
-        v0 <- MVar.empty[F[Int, ?], Int]
-        v = v0[F[Int, ?]]
+        v0 <- MVar.empty[F[Int, *], Int]
+        v = v0[F[Int, *]]
 
         _ <- v.put(42)
         i <- v.read
 
-        _ <- MonadState[F[Int, ?], Int].set(i)
+        _ <- Stateful[F[Int, *], Int].set(i)
       } yield ()
 
       runToCompletionEmpty(eff) mustEqual 42
@@ -46,9 +45,9 @@ class MVarSpecs extends Specification {
 
     "return None on tryRead for an empty var" in {
       val eff = for {
-        v <- MVar.empty[F[Option[Int], ?], Int]
-        r <- v.tryRead[F[Option[Int], ?]]
-        _ <- MonadState[F[Option[Int], ?], Option[Int]].set(r)
+        v <- MVar.empty[F[Option[Int], *], Int]
+        r <- v.tryRead[F[Option[Int], *]]
+        _ <- Stateful[F[Option[Int], *], Option[Int]].set(r)
       } yield ()
 
       runToCompletionEmpty(eff) must beNone
@@ -56,9 +55,9 @@ class MVarSpecs extends Specification {
 
     "return false for tryPut on a full bar" in {
       val eff = for {
-        v <- MVar[F[Boolean, ?], Int](42)
-        r <- v.tryPut[F[Boolean, ?]](12)
-        _ <- MonadState[F[Boolean, ?], Boolean].set(r)
+        v <- MVar[F[Boolean, *], Int](42)
+        r <- v.tryPut[F[Boolean, *]](12)
+        _ <- Stateful[F[Boolean, *], Boolean].set(r)
       } yield ()
 
       runToCompletion(true, eff) must beFalse
@@ -66,13 +65,13 @@ class MVarSpecs extends Specification {
 
     "remove the value on take" in {
       val eff = for {
-        v0 <- MVar[F[(Int, Option[Int]), ?], Int](42)
-        v = v0[F[(Int, Option[Int]), ?]]
+        v0 <- MVar[F[(Int, Option[Int]), *], Int](42)
+        v = v0[F[(Int, Option[Int]), *]]
 
         r1 <- v.take
         r2 <- v.tryRead
 
-        _ <- MonadState[F[(Int, Option[Int]), ?], (Int, Option[Int])].set((r1, r2))
+        _ <- Stateful[F[(Int, Option[Int]), *], (Int, Option[Int])].set((r1, r2))
       } yield ()
 
       runToCompletionEmpty(eff) mustEqual ((42, None))
@@ -80,38 +79,38 @@ class MVarSpecs extends Specification {
 
     "replace the value on swap" in {
       val eff = for {
-        v0 <- MVar[F[(Int, Int), ?], Int](42)
-        v = v0[F[(Int, Int), ?]]
+        v0 <- MVar[F[(Int, Int), *], Int](42)
+        v = v0[F[(Int, Int), *]]
 
         r1 <- v.swap(24)
         r2 <- v.read
 
-        _ <- MonadState[F[(Int, Int), ?], (Int, Int)].set((r1, r2))
+        _ <- Stateful[F[(Int, Int), *], (Int, Int)].set((r1, r2))
       } yield ()
 
       runToCompletionEmpty(eff) mustEqual ((42, 24))
     }
 
     "resolve a race condition" in {
-      val thread = ApplicativeThread[F[(Either[Int, Int], Int), ?]]
-      val state = MonadState[F[(Either[Int, Int], Int), ?], (Either[Int, Int], Int)]
+      val thread = ApplicativeThread[F[(Either[Int, Int], Int), *]]
+      val state = Stateful[F[(Either[Int, Int], Int), *], (Either[Int, Int], Int)]
 
       val eff = for {
-        v0 <- MVar.empty[F[(Either[Int, Int], Int), ?], Int]
-        v = v0[F[(Either[Int, Int], Int), ?]]
+        v0 <- MVar.empty[F[(Either[Int, Int], Int), *], Int]
+        v = v0[F[(Either[Int, Int], Int), *]]
 
-        results0 <- MVar.empty[F[(Either[Int, Int], Int), ?], Either[Int, Int]]
-        results = results0[F[(Either[Int, Int], Int), ?]]
+        results0 <- MVar.empty[F[(Either[Int, Int], Int), *], Either[Int, Int]]
+        results = results0[F[(Either[Int, Int], Int), *]]
 
         _ <- thread start {
           v.tryPut(5).ifM(
-            ().pure[F[(Either[Int, Int], Int), ?]],
+            ().pure[F[(Either[Int, Int], Int), *]],
             results.put(Left(5)))
         }
 
         _ <- thread start {
           v.tryPut(8).ifM(
-            ().pure[F[(Either[Int, Int], Int), ?]],
+            ().pure[F[(Either[Int, Int], Int), *]],
             results.put(Right(8)))
         }
 
@@ -127,7 +126,7 @@ class MVarSpecs extends Specification {
     }
 
     "detect a deadlock" in {
-      type F[A] = Kleisli[ThreadT[Eval, ?], MVar.Universe, A]
+      type F[A] = Kleisli[ThreadT[Eval, *], MVar.Universe, A]
 
       val eff = MVar.empty[F, Unit].flatMap(_.read[F])
       ThreadT.roundRobin(MVar.resolve(eff)).value must beFalse
