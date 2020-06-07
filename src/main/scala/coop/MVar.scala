@@ -19,7 +19,7 @@ package coop
 import cats.{Functor, Monad}
 import cats.data.Kleisli
 import cats.implicits._
-import cats.mtl.ApplicativeAsk
+import cats.mtl.Ask
 
 import ThreadF.MonitorId
 
@@ -92,14 +92,14 @@ final class MVar[A] private (monitor: MonitorId) { outer =>
   }
 
   private[this] def getU[F[_]: Functor: MVar.Ask]: F[Option[A]] =
-    ApplicativeAsk[F, MVar.Universe].ask.map(_().get(Key).map(_.asInstanceOf[A]))
+    Ask[F, MVar.Universe].ask.map(_().get(Key).map(_.asInstanceOf[A]))
 
   private[this] def setU[F[_]: Monad: MVar.Ask: ApplicativeThread](a: A): F[Unit] =
-    ApplicativeAsk[F, MVar.Universe].ask.map(_() += (Key -> a.asInstanceOf[Any])) >>
+    Ask[F, MVar.Universe].ask.map(_() += (Key -> a.asInstanceOf[Any])) >>
       ApplicativeThread[F].notify(monitor)
 
   private[this] def removeU[F[_]: Monad: MVar.Ask: ApplicativeThread]: F[Unit] =
-    ApplicativeAsk[F, MVar.Universe].ask.map(_() -= Key) >>
+    Ask[F, MVar.Universe].ask.map(_() -= Key) >>
       ApplicativeThread[F].notify(monitor)
 }
 
@@ -107,7 +107,7 @@ object MVar {
   // we use a kleisli of a ref of a map here rather than StateT to avoid issues with zeros in F
   // the Any(s) are required due to the existentiality of the A types
   type Universe = UnsafeRef[Map[MVar[Any], Any]]
-  type Ask[F[_]] = ApplicativeAsk[F, Universe]
+  type Ask[F[_]] = cats.mtl.Ask[F, Universe]
 
   def empty[F[_]: Functor: ApplicativeThread, A]: F[MVar[A]] =
     ApplicativeThread[F].monitor.map(new MVar[A](_))    // not actually pure due to object identity, but whatevs
