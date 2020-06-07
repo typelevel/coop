@@ -17,6 +17,7 @@
 package coop
 
 import cats.{~>, Applicative, Functor, Monad, Show}
+import cats.data.Const
 import cats.free.FreeT
 import cats.implicits._
 
@@ -92,9 +93,14 @@ object ThreadT {
     }
   }
 
+  private[this] def constK[M[_]]: M ~> Const[Option[String], *] =
+    new (M ~> Const[Option[String], *]) {
+      def apply[a](ma: M[a]) = Const(None)
+    }
+
   def prettyPrint[M[_]: Monad, A: Show](
       target: ThreadT[M, A],
-      render: M ~> λ[α => Option[String]] = λ[M ~> λ[α => Option[String]]](_ => None),
+      render: M ~> Const[Option[String], *] = constK[M],
       limit: Int = 512)   // sanity limit on the number of bytes allowed in the output
       : M[String] = {
     val TurnRight = "╰"
@@ -130,8 +136,8 @@ object ThreadT {
         val resumed = target.resume
 
         val (junc, front) = render(resumed) match {
-          case Some(str) => (Junction, drawIndent(indent, junc0 + " " + str) + "\n")
-          case None => (junc0, "")
+          case Const(Some(str)) => (Junction, drawIndent(indent, junc0 + " " + str) + "\n")
+          case Const(None) => (junc0, "")
         }
 
         val acc = acc0 + front
