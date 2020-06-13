@@ -14,9 +14,7 @@
  * limitations under the License.
  */
 
-name := "coop"
-
-ThisBuild / baseVersion := "0.5"
+ThisBuild / baseVersion := "0.6"
 
 ThisBuild / organization := "com.codecommit"
 ThisBuild / publishGithubUser := "djspiewak"
@@ -24,19 +22,9 @@ ThisBuild / publishFullName := "Daniel Spiewak"
 
 ThisBuild / strictSemVer := false
 
-ThisBuild / crossScalaVersions := Seq("2.12.11", "0.24.0-RC1", "2.13.2")
+ThisBuild / crossScalaVersions := Seq("0.24.0", "0.25.0-RC1", "2.12.11", "2.13.2")
 
 ThisBuild / githubWorkflowJavaVersions := Seq("adopt@1.8", "adopt@11", "adopt@14", "graalvm@20.1.0")
-ThisBuild / githubWorkflowBuild := WorkflowStep.Sbt(List("ci"))
-ThisBuild / githubWorkflowPublishTargetBranches := Seq()    // disable the publication job
-
-libraryDependencies ++= Seq(
-  "org.typelevel" %% "cats-free" % "2.1.0",
-  "org.typelevel" %% "cats-mtl"  % "1.0-9b8941d",
-
-  "org.specs2" %% "specs2-core" % "4.8.1" % Test)
-
-libraryDependencies := libraryDependencies.value.map(_.withDottyCompat(scalaVersion.value))
 
 Global / homepage := Some(url("https://github.com/djspiewak/coop"))
 
@@ -44,3 +32,19 @@ Global / scmInfo := Some(
   ScmInfo(
     url("https://github.com/djspiewak/coop"),
     "git@github.com:djspiewak/coop.git"))
+
+lazy val root = project.in(file(".")).aggregate(core.jvm, core.js)
+  .settings(noPublishSettings)
+
+lazy val core = crossProject(JSPlatform, JVMPlatform).in(file("core"))
+  .settings(
+    name := "coop",
+
+    libraryDependencies ++= Seq(
+      "org.typelevel" %%% "cats-free" % "2.1.1",
+      "org.typelevel" %%% "cats-mtl"  % "1.0-9b8941d",
+
+      "org.specs2" %%% "specs2-core" % "4.9.4" % Test))
+  .settings(dottyLibrarySettings)
+  .settings(dottyJsSettings(ThisBuild / crossScalaVersions))
+
