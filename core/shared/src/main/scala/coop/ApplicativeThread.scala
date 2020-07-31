@@ -19,7 +19,7 @@ package coop
 import cats.{Applicative, InjectK, Monad}
 import cats.data.{EitherT, Kleisli}
 import cats.free.FreeT
-import cats.implicits._
+import cats.syntax.all._
 
 import ThreadF.MonitorId
 
@@ -39,6 +39,8 @@ trait ApplicativeThread[F[_]] extends Serializable {
   def notify(id: MonitorId): F[Unit]
 
   def start[A](child: F[A]): F[Unit]
+
+  def annotate[A](name: String, indent: Boolean = false)(body: F[A]): F[A]
 }
 
 // NB it doesn't really make sense to define this for WriterT or StateT due to the value loss in start/fork
@@ -75,6 +77,14 @@ object ApplicativeThread {
 
       def start[A](child: FreeT[S, F, A]): FreeT[S, F, Unit] =
         fork(false, true).ifM(child.void >> done[Unit], ().pure[FreeT[S, F, *]])
+
+      def annotate[A](name: String, indent: Boolean)(body: FreeT[S, F, A]): FreeT[S, F, A] =
+        FreeT.liftF(S(ThreadF.Annotate(name, () => ()))) *> {
+          if (indent)
+            FreeT.liftF(S(ThreadF.Indent(() => ()))) *> body <* FreeT.liftF(S(ThreadF.Dedent(() => ())))
+          else
+            body
+        }
     }
 
   implicit def forKleisli[F[_]: Monad: ApplicativeThread, R]: ApplicativeThread[Kleisli[F, R, *]] =
@@ -105,6 +115,9 @@ object ApplicativeThread {
         Kleisli.ask[F, R] flatMapF { r =>
           thread.start(child.run(r))
         }
+
+      def annotate[A](name: String, indent: Boolean)(body: Kleisli[F, R, A]): Kleisli[F, R, A] =
+        Kleisli { r => thread.annotate(name, indent)(body.run(r)) }
     }
 
   implicit def forEitherT[F[_]: Monad: ApplicativeThread, E]: ApplicativeThread[EitherT[F, E, *]] =
@@ -133,5 +146,8 @@ object ApplicativeThread {
 
       def start[A](child: EitherT[F, E, A]): EitherT[F, E, Unit] =
         EitherT.liftF(thread.start(child.value))
+
+      def annotate[A](name: String, indent: Boolean)(body: EitherT[F, E, A]): EitherT[F, E, A] =
+        EitherT(thread.annotate(name, indent)(body.value))
     }
 }

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-ThisBuild / baseVersion := "0.6"
+ThisBuild / baseVersion := "0.7"
 
 ThisBuild / organization := "com.codecommit"
 ThisBuild / publishGithubUser := "djspiewak"
