@@ -220,8 +220,9 @@ object ThreadT {
               LoopState(results(), acc2, false :: indent, false).asLeft[String].pure[M]
 
             case Left(Dedent(results)) =>
-              val acc2 = acc + drawIndent(indent, DedentStr) + "\n"
-              LoopState(results(), acc2, indent.tail, false).asLeft[String].pure[M]
+              val indent2 = indent.tail
+              val acc2 = acc + drawIndent(indent2, DedentStr) + "\n"
+              LoopState(results(), acc2, indent2, false).asLeft[String].pure[M]
 
             case Right(a) =>
               (acc + drawIndent(indent, TurnRight + " Pure " + a.show + trailing)).asRight[LoopState].pure[M]
