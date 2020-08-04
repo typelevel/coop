@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-ThisBuild / baseVersion := "0.6"
+ThisBuild / baseVersion := "0.7"
 
 ThisBuild / organization := "com.codecommit"
 ThisBuild / publishGithubUser := "djspiewak"
@@ -44,7 +44,12 @@ lazy val core = crossProject(JSPlatform, JVMPlatform).in(file("core"))
       "org.typelevel" %%% "cats-free" % "2.1.1",
       "org.typelevel" %%% "cats-mtl"  % "1.0-9b8941d",
 
-      "org.specs2" %%% "specs2-core" % "4.10.2" % Test))
+      "org.specs2" %%% "specs2-core" % "4.10.1" % Test),
+
+    mimaPreviousArtifacts := {
+      val old = mimaPreviousArtifacts.value
+      if (isDotty.value) Set() else old
+    })
   .settings(dottyLibrarySettings)
   .settings(dottyJsSettings(ThisBuild / crossScalaVersions))
 

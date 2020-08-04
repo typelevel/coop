@@ -50,6 +50,14 @@ object ThreadT {
   def start[M[_]: Applicative, A](child: ThreadT[M, A]): ThreadT[M, Unit] =
     fork[M, Boolean](false, true).ifM(child >> done[M, Unit], ().pure[ThreadT[M, *]])
 
+  def annotate[M[_]: Applicative, A](name: String, indent: Boolean = false)(body: ThreadT[M, A]): ThreadT[M, A] =
+    FreeT.liftF[ThreadF, M, Unit](Annotate(name, () => ())) *> {
+      if (indent)
+        FreeT.liftF[ThreadF, M, Unit](Indent(() => ())) *> body <* FreeT.liftF[ThreadF, M, Unit](Dedent(() => ()))
+      else
+        body
+    }
+
   def roundRobin[M[_]: Monad, A](main: ThreadT[M, A]): M[Boolean] = {
     // we maintain a separate head just to avoid queue prepending
     case class LoopState(
@@ -84,6 +92,15 @@ object ThreadT {
               // enqueueAll was added in 2.13
               val tail2 = locks(id).foldLeft(tail)(_.enqueue(_))
               Left(LoopState(None, tail2.enqueue(results), locks.updated(id, Queue.empty)))
+
+            case Left(Annotate(_, results)) =>
+              Left(LoopState(Some(results), tail, locks))
+
+            case Left(Indent(results)) =>
+              Left(LoopState(Some(results), tail, locks))
+
+            case Left(Dedent(results)) =>
+              Left(LoopState(Some(results), tail, locks))
           }
 
         // if we have outstanding awaits but no active fibers, then we're deadlocked
@@ -104,34 +121,54 @@ object ThreadT {
       limit: Int = 512)   // sanity limit on the number of bytes allowed in the output
       : M[String] = {
     val TurnRight = "╰"
+    val TurnLeft = "╯"
+
     val InverseTurnRight = "╭"
-    val TurnDown = "╮"
+    val InverseTurnLeft = "╮"
+
+    val IndentStr = TurnRight + InverseTurnLeft
+    val DedentStr = InverseTurnRight + TurnLeft
+    val IndentSpacing = IndentStr.length - 1
+
     val Junction = "├"
     val Line = "│"
 
-    val ForkStr = Line + " " + TurnRight + TurnDown
-    val Spacing = ForkStr.length - 2
+    val ForkStr = Line + " " + TurnRight + InverseTurnLeft
+    val ForkSpacing = ForkStr.length - 2
 
     def drawSpaces(num: Int): String =
       (0 until num).map(_ => ' ').mkString
 
-    def drawIndent(level: Int, term: String): String = {
-      if (level > 0)
-        Line + drawSpaces(Spacing) + drawIndent(level - 1, term)
-      else
-        term
+    def drawIndent(level0: List[Boolean], term: String): String = {
+      def loop(level: List[Boolean]): String =
+        level match {
+          case true :: tail =>
+            Line + drawSpaces(ForkSpacing) + loop(tail)
+
+          case false :: tail =>
+            drawSpaces(IndentSpacing) + loop(tail)
+
+          case Nil =>
+            term
+        }
+
+      loop(level0.reverse)
     }
 
     def drawId(id: MonitorId): String = "0x" + id.hashCode.toHexString.toUpperCase
 
-    case class LoopState(target: ThreadT[M, A], acc: String, indent: Int, init: Boolean = false)
+    case class LoopState(
+        target: ThreadT[M, A],
+        acc: String,
+        indent: List[Boolean],
+        init: Boolean = false)
 
-    def loop(target: ThreadT[M, A], acc: String, indent: Int, init: Boolean): M[String] = {
+    def loop(target: ThreadT[M, A], acc: String, indent: List[Boolean], init: Boolean): M[String] = {
       Monad[M].tailRecM(LoopState(target, acc, indent, init)) { ls =>
         val LoopState(target, acc0, indent, init) = ls
 
         val junc0 = if (init) InverseTurnRight else Junction
-        val trailing = if (indent > 0) "\n" + drawIndent(indent, "") else ""
+        val trailing = if (indent != Nil) "\n" + drawIndent(indent, "") else ""
 
         val resumed = target.resume
 
@@ -150,7 +187,7 @@ object ThreadT {
             case Left(Fork(left, right)) =>
               val leading = drawIndent(indent, junc + " Fork") + "\n" + drawIndent(indent, ForkStr)
 
-              loop(right(), "", indent + 1, false) map { rightStr =>
+              loop(right(), "", true :: indent, false) map { rightStr =>
                 val acc2 = acc + leading + "\n" + rightStr + "\n"
                 LoopState(left(), acc2, indent, false).asLeft[String]
               }
@@ -174,6 +211,19 @@ object ThreadT {
               val acc2 = acc + drawIndent(indent, junc + " Notify ") + drawId(id) + "\n"
               LoopState(results(), acc2, indent, false).asLeft[String].pure[M]
 
+            case Left(Annotate(name, results)) =>
+              val acc2 = acc + drawIndent(indent, junc + s" $name") + "\n"
+              LoopState(results(), acc2, indent, false).asLeft[String].pure[M]
+
+            case Left(Indent(results)) =>
+              val acc2 = acc + drawIndent(indent, IndentStr) + "\n"
+              LoopState(results(), acc2, false :: indent, false).asLeft[String].pure[M]
+
+            case Left(Dedent(results)) =>
+              val indent2 = indent.tail
+              val acc2 = acc + drawIndent(indent2, DedentStr) + "\n"
+              LoopState(results(), acc2, indent2, false).asLeft[String].pure[M]
+
             case Right(a) =>
               (acc + drawIndent(indent, TurnRight + " Pure " + a.show + trailing)).asRight[LoopState].pure[M]
           }
@@ -181,6 +231,6 @@ object ThreadT {
       }
     }
 
-    loop(target, "", 0, true)
+    loop(target, "", Nil, true)
   }
 }
