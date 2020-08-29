@@ -22,7 +22,7 @@ ThisBuild / publishFullName := "Daniel Spiewak"
 
 ThisBuild / strictSemVer := false
 
-ThisBuild / crossScalaVersions := Seq("0.25.0", "0.26.0-RC1", "2.12.11", "2.13.2")
+ThisBuild / crossScalaVersions := Seq("0.26.0", "0.27.0-RC1", "2.12.11", "2.13.2")
 
 ThisBuild / githubWorkflowJavaVersions := Seq("adopt@1.8", "adopt@11", "adopt@14", "graalvm@20.1.0")
 
