@@ -41,7 +41,7 @@ lazy val core = crossProject(JSPlatform, JVMPlatform).in(file("core"))
     name := "coop",
 
     libraryDependencies ++= Seq(
-      "org.typelevel" %%% "cats-free" % "2.1.1",
+      "org.typelevel" %%% "cats-free" % "2.2.0",
       "org.typelevel" %%% "cats-mtl"  % "1.0-9b8941d",
 
       "org.specs2" %%% "specs2-core" % "4.10.3" % Test),
