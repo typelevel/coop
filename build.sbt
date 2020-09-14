@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Daniel Spiewak
+ * Copyright 2020 Typelevel
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,9 +14,11 @@
  * limitations under the License.
  */
 
-ThisBuild / baseVersion := "0.7"
+ThisBuild / baseVersion := "1.0"
 
-ThisBuild / organization := "com.codecommit"
+ThisBuild / organization := "org.typelevel"
+ThisBuild / organizationName := "Typelevel"
+
 ThisBuild / publishGithubUser := "djspiewak"
 ThisBuild / publishFullName := "Daniel Spiewak"
 
@@ -26,12 +28,12 @@ ThisBuild / crossScalaVersions := Seq("0.26.0", "0.27.0-RC1", "2.12.11", "2.13.2
 
 ThisBuild / githubWorkflowJavaVersions := Seq("adopt@1.8", "adopt@11", "adopt@14", "graalvm@20.1.0")
 
-Global / homepage := Some(url("https://github.com/djspiewak/coop"))
+Global / homepage := Some(url("https://github.com/typelevel/coop"))
 
 Global / scmInfo := Some(
   ScmInfo(
-    url("https://github.com/djspiewak/coop"),
-    "git@github.com:djspiewak/coop.git"))
+    url("https://github.com/typelevel/coop"),
+    "git@github.com:typelevel/coop.git"))
 
 lazy val root = project.in(file(".")).aggregate(core.jvm, core.js)
   .settings(noPublishSettings)
@@ -42,7 +44,7 @@ lazy val core = crossProject(JSPlatform, JVMPlatform).in(file("core"))
 
     libraryDependencies ++= Seq(
       "org.typelevel" %%% "cats-free" % "2.2.0",
-      "org.typelevel" %%% "cats-mtl"  % "1.0-9b8941d",
+      "org.typelevel" %%% "cats-mtl"  % "1.0.0",
 
       "org.specs2" %%% "specs2-core" % "4.10.3" % Test),
 
