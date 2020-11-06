@@ -49,7 +49,8 @@ object ThreadF {
   final case class Annotate[A](text: String, results: () => A) extends ThreadF[A]
   final case class Indent[A](results: () => A) extends ThreadF[A]
   final case class Dedent[A](results: () => A) extends ThreadF[A]
-
+  
   // an opaque fresh id
-  final class MonitorId private[coop] ()
+  final case class MonitorId private[coop] (private val id: Int)
+  private object MonitorId
 }
