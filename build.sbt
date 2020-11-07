@@ -29,14 +29,12 @@ ThisBuild / crossScalaVersions := Seq("0.27.0-RC1", "3.0.0-M1", "2.12.12", "2.13
 // Restore running the CI on Java 15 (https://github.com/lampepfl/dotty/issues/10131).
 ThisBuild / githubWorkflowJavaVersions := Seq("adopt@1.8", "adopt@1.11", "graalvm-ce-java8@20.2.0")
 
-Global / homepage := Some(url("https://github.com/typelevel/coop"))
+ThisBuild / homepage := Some(url("https://github.com/typelevel/coop"))
 
-Global / scmInfo := Some(
+ThisBuild / scmInfo := Some(
   ScmInfo(
     url("https://github.com/typelevel/coop"),
-    "git@github.com:typelevel/coop.git"
-  )
-)
+    "git@github.com:typelevel/coop.git"))
 
 lazy val root = project.in(file(".")).aggregate(core.jvm, core.js)
   .settings(noPublishSettings)
@@ -44,11 +42,12 @@ lazy val root = project.in(file(".")).aggregate(core.jvm, core.js)
 lazy val core = crossProject(JSPlatform, JVMPlatform).in(file("core"))
   .settings(
     name := "coop",
-
+    libraryDependencies += "org.specs2" %%% "specs2-core" % "4.10.5" % Test)
+  .settings(dottyLibrarySettings)
+  .settings(
     libraryDependencies ++= Seq(
-      "org.typelevel" %%% "cats-free" % "2.2.0",
-      "org.typelevel" %%% "cats-mtl"  % "1.0.0",
-      "org.specs2" %%% "specs2-core" % "4.10.5" % Test
-    ).map(_.withDottyCompat(scalaVersion.value))
-  )
+      "org.typelevel" %%% "cats-free" % "2.3.0-M2",
+      "org.typelevel" %%% "cats-mtl"  % "1.1.0-M1"))
+  .jsSettings(
+    crossScalaVersions := (ThisBuild / crossScalaVersions).value.filter(_.startsWith("2.")))
 
