@@ -28,7 +28,7 @@ final class Ref[A] private[coop] (private[coop] val monitorId: MonitorId) { self
     modify(_ => (a, ()))
   
   def modify[F[_]: ApplicativeThread, B](f: A => (A, B)): F[B] =
-    ApplicativeThread[F].modify[A, B](this, f)
+    ApplicativeThread[F].refModify[A, B](this, f)
 
   def getAndSet[F[_]: ApplicativeThread](a: A): F[A] =
     modify(oldA => (a, oldA))

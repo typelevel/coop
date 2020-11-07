@@ -44,7 +44,13 @@ trait ApplicativeThread[F[_]] extends Serializable {
 
   def refOf[A](a: A): F[Ref[A]]
 
-  def modify[A, B](ref: Ref[A], f: A => (A, B)): F[B]
+  def refModify[A, B](ref: Ref[A], f: A => (A, B)): F[B]
+
+  def deferred[A]: F[Deferred[A]]
+
+  def deferredTryGet[A](deferred: Deferred[A]): F[Option[A]]
+
+  def deferredComplete[A](deferred: Deferred[A], a: A): F[Unit]
 }
 
 // NB it doesn't really make sense to define this for WriterT or StateT due to the value loss in start/fork
@@ -93,8 +99,17 @@ object ApplicativeThread {
       def refOf[A](a: A): FreeT[S, F, Ref[A]] =
         monitor.flatMap(id => FreeT.liftF(S(ThreadF.MkRef(a, id, identity[Ref[A]]))))
 
-      def modify[A, B](ref: Ref[A], f: A => (A, B)): FreeT[S, F, B] =
+      def refModify[A, B](ref: Ref[A], f: A => (A, B)): FreeT[S, F, B] =
         FreeT.liftF(S(ThreadF.ModifyRef(ref, f, identity[B])))
+  
+      def deferred[A]: FreeT[S, F, Deferred[A]] =
+        monitor.flatMap(id => FreeT.liftF(S(ThreadF.MkDeferred(id, identity[Deferred[A]]))))
+
+      def deferredTryGet[A](deferred: Deferred[A]): FreeT[S, F, Option[A]] =
+        FreeT.liftF(S(ThreadF.TryGetDeferred(deferred, identity[Option[A]])))
+
+      def deferredComplete[A](deferred: Deferred[A], a: A): FreeT[S, F, Unit] =
+        FreeT.liftF(S(ThreadF.CompleteDeferred(deferred, a, () => ())))
     }
 
   implicit def forKleisli[F[_]: Monad: ApplicativeThread, R]: ApplicativeThread[Kleisli[F, R, *]] =
@@ -132,8 +147,17 @@ object ApplicativeThread {
       def refOf[A](a: A): Kleisli[F, R, Ref[A]] =
         Kleisli.liftF(thread.refOf(a))
 
-      def modify[A, B](ref: Ref[A], f: A => (A, B)): Kleisli[F, R, B] =
-        Kleisli.liftF(thread.modify(ref, f))
+      def refModify[A, B](ref: Ref[A], f: A => (A, B)): Kleisli[F, R, B] =
+        Kleisli.liftF(thread.refModify(ref, f))
+
+      def deferred[A]: Kleisli[F, R, Deferred[A]] =
+        Kleisli.liftF(thread.deferred)
+
+      def deferredTryGet[A](deferred: Deferred[A]): Kleisli[F, R, Option[A]] =
+        Kleisli.liftF(thread.deferredTryGet(deferred))
+
+      def deferredComplete[A](deferred: Deferred[A], a: A): Kleisli[F, R, Unit] =
+        Kleisli.liftF(thread.deferredComplete(deferred, a))
     }
 
   implicit def forEitherT[F[_]: Monad: ApplicativeThread, E]: ApplicativeThread[EitherT[F, E, *]] =
@@ -169,7 +193,16 @@ object ApplicativeThread {
       def refOf[A](a: A): EitherT[F, E, Ref[A]] =
         EitherT.liftF(thread.refOf(a))
 
-      def modify[A, B](ref: Ref[A], f: A => (A, B)): EitherT[F,E,B] =
-        EitherT.liftF(thread.modify(ref, f))
+      def refModify[A, B](ref: Ref[A], f: A => (A, B)): EitherT[F,E,B] =
+        EitherT.liftF(thread.refModify(ref, f))
+
+      def deferred[A]: EitherT[F, E, Deferred[A]] =
+        EitherT.liftF(thread.deferred)
+
+      def deferredTryGet[A](deferred: Deferred[A]): EitherT[F, E, Option[A]] =
+        EitherT.liftF(thread.deferredTryGet(deferred))
+
+      def deferredComplete[A](deferred: Deferred[A], a: A): EitherT[F, E, Unit] =
+        EitherT.liftF(thread.deferredComplete(deferred, a))
     }
 }

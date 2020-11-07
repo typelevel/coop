@@ -58,11 +58,20 @@ object ThreadT {
         body
     }
 
-  private[coop] def refOf[M[_]: Applicative, A](a: A): ThreadT[M, Ref[A]] =
+  def refOf[M[_]: Applicative, A](a: A): ThreadT[M, Ref[A]] =
     monitor[M].flatMap(id => FreeT.liftF(MkRef(a, id, identity[Ref[A]])))
 
-  private[coop] def modify[M[_]: Applicative, A, B](ref: Ref[A], f: A => (A, B)): ThreadT[M, B] =
+  def modify[M[_]: Applicative, A, B](ref: Ref[A], f: A => (A, B)): ThreadT[M, B] =
     FreeT.liftF(ModifyRef(ref, f, identity[B]))
+
+  def deferred[M[_]: Applicative, A]: ThreadT[M, Deferred[A]] =
+    monitor[M].flatMap(id => FreeT.liftF(MkDeferred(id, identity[Deferred[A]])))
+
+  def deferredTryGet[M[_]: Applicative, A](deferred: Deferred[A]): ThreadT[M, Option[A]] =
+    FreeT.liftF(TryGetDeferred(deferred, identity[Option[A]]))
+
+  def deferredComplete[M[_]: Applicative, A](deferred: Deferred[A], a: A): ThreadT[M, Unit] =
+    FreeT.liftF(CompleteDeferred(deferred, a, () => ()))
 
   def roundRobin[M[_]: Monad, A](main: ThreadT[M, A]): M[Boolean] = {
     // we maintain a separate head just to avoid queue prepending
@@ -71,54 +80,69 @@ object ThreadT {
         work: Queue[() => ThreadT[M, _]],
         monitorCount: Int,
         locks: Map[MonitorId, Queue[() => ThreadT[M, _]]],
-        refs: Map[MonitorId, _]
+        refs: Map[MonitorId, _],
+        deferreds: Map[MonitorId, _]
     )
 
-    Monad[M].tailRecM(LoopState(Some(() => main), Queue.empty, 0, Map.empty, Map.empty)) { ls =>
-      val LoopState(head, work, count, locks, refs) = ls
+    Monad[M].tailRecM(LoopState(Some(() => main), Queue.empty, 0, Map.empty, Map.empty, Map.empty)) { ls =>
+      val LoopState(head, work, count, locks, refs, deferreds) = ls
 
       head.tupleRight(work).orElse(work.dequeueOption) match {
         case Some((head, tail)) =>
           head().resume map {
             case Left(Fork(left, right)) =>
-              Left(LoopState(Some(left), tail.enqueue(right), count, locks, refs))
+              Left(LoopState(Some(left), tail.enqueue(right), count, locks, refs, deferreds))
 
             case Left(Cede(results)) =>
               val tail2 = tail.enqueue(results)
-              Left(LoopState(None, tail2, count, locks, refs))
+              Left(LoopState(None, tail2, count, locks, refs, deferreds))
 
             case Left(Done) | Right(_) =>
-              Left(LoopState(None, tail, count, locks, refs))
+              Left(LoopState(None, tail, count, locks, refs, deferreds))
 
             case Left(Monitor(f)) =>
               val id = new MonitorId(count)
-              Left(LoopState(Some(() => f(id)), tail, count + 1, locks + (id -> Queue.empty), refs))
+              Left(LoopState(Some(() => f(id)), tail, count + 1, locks + (id -> Queue.empty), refs, deferreds))
 
             case Left(Await(id, results)) =>
-              Left(LoopState(None, tail, count, locks.updated(id, locks(id).enqueue(results)), refs))
+              Left(LoopState(None, tail, count, locks.updated(id, locks(id).enqueue(results)), refs, deferreds))
 
             case Left(Notify(id, results)) =>
               // enqueueAll was added in 2.13
               val tail2 = locks(id).foldLeft(tail)(_.enqueue(_))
-              Left(LoopState(None, tail2.enqueue(results), count, locks.updated(id, Queue.empty), refs))
+              Left(LoopState(None, tail2.enqueue(results), count, locks.updated(id, Queue.empty), refs, deferreds))
 
             case Left(Annotate(_, results)) =>
-              Left(LoopState(Some(results), tail, count, locks, refs))
+              Left(LoopState(Some(results), tail, count, locks, refs, deferreds))
 
             case Left(Indent(results)) =>
-              Left(LoopState(Some(results), tail, count, locks, refs))
+              Left(LoopState(Some(results), tail, count, locks, refs, deferreds))
 
             case Left(Dedent(results)) =>
-              Left(LoopState(Some(results), tail, count, locks, refs))
+              Left(LoopState(Some(results), tail, count, locks, refs, deferreds))
 
             case Left(MkRef(a, id, body)) =>
               val ref = new Ref[Any](id)
-              Left(LoopState(Some(() => body(ref)), tail, count, locks, refs + (id -> a)))
+              Left(LoopState(Some(() => body(ref)), tail, count, locks, refs + (id -> a), deferreds))
 
             case Left(ModifyRef(ref, f, body)) =>
               val a = refs(ref.monitorId)
               val (newA, b) = f(a)
-              Left(LoopState(Some(() => body(b)), tail, count, locks, refs.updated(ref.monitorId, newA)))
+              Left(LoopState(Some(() => body(b)), tail, count, locks, refs.updated(ref.monitorId, newA), deferreds))
+
+            case Left(MkDeferred(id, body)) =>
+              val deferred = new Deferred[Any](id)
+              Left(LoopState(Some(() => body(deferred)), tail, count, locks, refs, deferreds))
+
+            case Left(TryGetDeferred(deferred, body)) =>
+              val optA = deferreds.get(deferred.monitorId)
+              Left(LoopState(Some(() => body(optA)), tail, count, locks, refs, deferreds))
+
+            case Left(CompleteDeferred(deferred, a, body)) =>
+              Left(LoopState(Some(() => body()), tail, count, locks, refs, deferreds.updatedWith(deferred.monitorId) {
+                case Some(oldA) => Some(oldA)
+                case None => Some(a)
+              }))
           }
 
         // if we have outstanding awaits but no active fibers, then we're deadlocked
@@ -177,18 +201,21 @@ object ThreadT {
 
     def drawRef(ref: Ref[Any], a: Any): String = "Ref(id = " + drawId(ref.monitorId) + ") =" + a.toString
 
+    def drawDeferred(deferred: Deferred[Any]): String = "Deferred(id = " + drawId(deferred.monitorId) + ")"
+
     case class LoopState(
         target: ThreadT[M, A],
         acc: String,
         indent: List[Boolean],
         init: Boolean = false,
         monitorCount: Int,
-        refs: Map[MonitorId, _]
+        refs: Map[MonitorId, _],
+        deferreds: Map[MonitorId, _]
     )
 
-    def loop(target: ThreadT[M, A], acc: String, indent: List[Boolean], init: Boolean, monitorCount: Int, refs: Map[MonitorId, _]): M[String] = {
-      Monad[M].tailRecM(LoopState(target, acc, indent, init, monitorCount, refs)) { ls =>
-        val LoopState(target, acc0, indent, init, count, refs) = ls
+    def loop(target: ThreadT[M, A], acc: String, indent: List[Boolean], init: Boolean, monitorCount: Int, refs: Map[MonitorId, _], deferreds: Map[MonitorId, _]): M[String] = {
+      Monad[M].tailRecM(LoopState(target, acc, indent, init, monitorCount, refs, deferreds)) { ls =>
+        val LoopState(target, acc0, indent, init, count, refs, deferreds) = ls
 
         val junc0 = if (init) InverseTurnRight else Junction
         val trailing = if (indent != Nil) "\n" + drawIndent(indent, "") else ""
@@ -210,53 +237,70 @@ object ThreadT {
             case Left(Fork(left, right)) =>
               val leading = drawIndent(indent, junc + " Fork") + "\n" + drawIndent(indent, ForkStr)
 
-              loop(right(), "", true :: indent, false, count, refs) map { rightStr =>
+              loop(right(), "", true :: indent, false, count, refs, deferreds) map { rightStr =>
                 val acc2 = acc + leading + "\n" + rightStr + "\n"
-                LoopState(left(), acc2, indent, false, count, refs).asLeft[String]
+                LoopState(left(), acc2, indent, false, count, refs, deferreds).asLeft[String]
               }
 
             case Left(Cede(results)) =>
               val acc2 = acc + drawIndent(indent, junc + " Cede") + "\n"
-              LoopState(results(), acc2, indent, false, count, refs).asLeft[String].pure[M]
+              LoopState(results(), acc2, indent, false, count, refs, deferreds).asLeft[String].pure[M]
 
             case Left(Done) =>
               (acc + drawIndent(indent, TurnRight + " Done" + trailing)).asRight[LoopState].pure[M]
 
             case Left(Monitor(f)) =>
               val id = new MonitorId(count)
-              LoopState(f(id), acc, indent, init, count + 1, refs).asLeft[String].pure[M]   // don't render the creation
+              LoopState(f(id), acc, indent, init, count + 1, refs, deferreds).asLeft[String].pure[M]   // don't render the creation
 
             case Left(Await(id, results)) =>
               val acc2 = acc + drawIndent(indent, junc + " Await ") + drawId(id) + "\n"
-              LoopState(results(), acc2, indent, false, count, refs).asLeft[String].pure[M]
+              LoopState(results(), acc2, indent, false, count, refs, deferreds).asLeft[String].pure[M]
 
             case Left(Notify(id, results)) =>
               val acc2 = acc + drawIndent(indent, junc + " Notify ") + drawId(id) + "\n"
-              LoopState(results(), acc2, indent, false, count, refs).asLeft[String].pure[M]
+              LoopState(results(), acc2, indent, false, count, refs, deferreds).asLeft[String].pure[M]
 
             case Left(Annotate(name, results)) =>
               val acc2 = acc + drawIndent(indent, junc + s" $name") + "\n"
-              LoopState(results(), acc2, indent, false, count, refs).asLeft[String].pure[M]
+              LoopState(results(), acc2, indent, false, count, refs, deferreds).asLeft[String].pure[M]
 
             case Left(Indent(results)) =>
               val acc2 = acc + drawIndent(indent, IndentStr) + "\n"
-              LoopState(results(), acc2, false :: indent, false, count, refs).asLeft[String].pure[M]
+              LoopState(results(), acc2, false :: indent, false, count, refs, deferreds).asLeft[String].pure[M]
 
             case Left(Dedent(results)) =>
               val indent2 = indent.tail
               val acc2 = acc + drawIndent(indent2, DedentStr) + "\n"
-              LoopState(results(), acc2, indent2, false, count, refs).asLeft[String].pure[M]
+              LoopState(results(), acc2, indent2, false, count, refs, deferreds).asLeft[String].pure[M]
 
             case Left(MkRef(a, id, body)) =>
               val ref = new Ref[Any](id)
               val acc2 = acc + drawIndent(indent, junc + " Create ref ") + drawRef(ref, a) + "\n"
-              LoopState(body(ref), acc2, indent, init, count, refs + (ref.monitorId -> a)).asLeft[String].pure[M]
+              LoopState(body(ref), acc2, indent, init, count, refs + (ref.monitorId -> a), deferreds).asLeft[String].pure[M]
 
             case Left(ModifyRef(ref, f, body)) =>
               val a = refs(ref.monitorId)
               val (newA, b) = f(a)
               val acc2 = acc + drawIndent(indent, junc + " Modify ref ") + drawRef(ref, newA) + ", produced " + b.toString + "\n"
-              LoopState(body(b), acc2, indent, init, count, refs.updated(ref.monitorId, newA)).asLeft[String].pure[M]
+              LoopState(body(b), acc2, indent, init, count, refs.updated(ref.monitorId, newA), deferreds).asLeft[String].pure[M]
+
+            case Left(MkDeferred(id, body)) =>
+              val deferred = new Deferred[Any](id)
+              val acc2 = acc + drawIndent(indent, junc + " Create deferred ") + drawDeferred(deferred) + "\n"
+              LoopState(body(deferred), acc2, indent, init, count, refs, deferreds).asLeft[String].pure[M]
+
+            case Left(TryGetDeferred(deferred, body)) =>
+              val optA = deferreds.get(deferred.monitorId)
+              val acc2 = acc + drawIndent(indent, junc + " Try get deferred ") + drawDeferred(deferred) + " = " + optA.toString + "\n"
+              LoopState(body(optA), acc2, indent, init, count, refs, deferreds).asLeft[String].pure[M]
+
+            case Left(CompleteDeferred(deferred, a, body)) =>
+              val acc2 = acc + drawIndent(indent, junc + " Complete deferred ") + drawDeferred(deferred) + " with value " + a.toString + "\n"
+              LoopState(body(), acc2, indent, init, count, refs, deferreds.updatedWith(deferred.monitorId) {
+                case Some(oldA) => Some(oldA)
+                case None => Some(a)
+              }).asLeft[String].pure[M]
 
             case Right(a) =>
               (acc + drawIndent(indent, TurnRight + " Pure " + a.show + trailing)).asRight[LoopState].pure[M]
@@ -265,6 +309,6 @@ object ThreadT {
       }
     }
 
-    loop(target, "", Nil, true, 0, Map.empty)
+    loop(target, "", Nil, true, 0, Map.empty, Map.empty)
   }
 }
