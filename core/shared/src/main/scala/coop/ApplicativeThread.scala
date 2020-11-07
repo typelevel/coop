@@ -41,6 +41,10 @@ trait ApplicativeThread[F[_]] extends Serializable {
   def start[A](child: F[A]): F[Unit]
 
   def annotate[A](name: String, indent: Boolean = false)(body: F[A]): F[A]
+
+  def refOf[A](a: A): F[Ref[A]]
+
+  def modify[A, B](ref: Ref[A], f: A => (A, B)): F[B]
 }
 
 // NB it doesn't really make sense to define this for WriterT or StateT due to the value loss in start/fork
@@ -85,6 +89,12 @@ object ApplicativeThread {
           else
             body
         }
+
+      def refOf[A](a: A): FreeT[S, F, Ref[A]] =
+        monitor.flatMap(id => FreeT.liftF(S(ThreadF.MkRef(a, id, identity[Ref[A]]))))
+
+      def modify[A, B](ref: Ref[A], f: A => (A, B)): FreeT[S, F, B] =
+        FreeT.liftF(S(ThreadF.ModifyRef(ref, f, identity[B])))
     }
 
   implicit def forKleisli[F[_]: Monad: ApplicativeThread, R]: ApplicativeThread[Kleisli[F, R, *]] =
@@ -118,6 +128,12 @@ object ApplicativeThread {
 
       def annotate[A](name: String, indent: Boolean)(body: Kleisli[F, R, A]): Kleisli[F, R, A] =
         Kleisli { r => thread.annotate(name, indent)(body.run(r)) }
+
+      def refOf[A](a: A): Kleisli[F, R, Ref[A]] =
+        Kleisli.liftF(thread.refOf(a))
+
+      def modify[A, B](ref: Ref[A], f: A => (A, B)): Kleisli[F, R, B] =
+        Kleisli.liftF(thread.modify(ref, f))
     }
 
   implicit def forEitherT[F[_]: Monad: ApplicativeThread, E]: ApplicativeThread[EitherT[F, E, *]] =
@@ -149,5 +165,11 @@ object ApplicativeThread {
 
       def annotate[A](name: String, indent: Boolean)(body: EitherT[F, E, A]): EitherT[F, E, A] =
         EitherT(thread.annotate(name, indent)(body.value))
+
+      def refOf[A](a: A): EitherT[F, E, Ref[A]] =
+        EitherT.liftF(thread.refOf(a))
+
+      def modify[A, B](ref: Ref[A], f: A => (A, B)): EitherT[F,E,B] =
+        EitherT.liftF(thread.modify(ref, f))
     }
 }

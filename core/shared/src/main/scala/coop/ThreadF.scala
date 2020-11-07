@@ -35,6 +35,9 @@ object ThreadF {
       case Annotate(text, results) => Annotate(text, () => f(results()))
       case Indent(results) => Indent(() => f(results()))
       case Dedent(results) => Dedent(() => f(results()))
+
+      case MkRef(a, id, body) => MkRef(a, id, body.andThen(f))
+      case ModifyRef(ref, modF, body) => ModifyRef(ref, modF, body.andThen(f))
     }
   }
 
@@ -49,8 +52,11 @@ object ThreadF {
   final case class Annotate[A](text: String, results: () => A) extends ThreadF[A]
   final case class Indent[A](results: () => A) extends ThreadF[A]
   final case class Dedent[A](results: () => A) extends ThreadF[A]
+
+  final case class MkRef[A, B](a: A, id: MonitorId, body: Ref[A] => B) extends ThreadF[B]
+  final case class ModifyRef[A, B, C](ref: Ref[A], f: A => (A, B), body: B => C) extends ThreadF[C]
   
   // an opaque fresh id
-  final case class MonitorId private[coop] (private val id: Int)
+  final case class MonitorId private[coop] (private[coop] val id: Int)
   private object MonitorId
 }
