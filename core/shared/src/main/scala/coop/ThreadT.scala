@@ -121,28 +121,27 @@ object ThreadT {
             case Left(Dedent(results)) =>
               Left(LoopState(Some(results), tail, count, locks, refs, deferreds))
 
-            case Left(MkRef(a, id, body)) =>
-              val ref = new Ref[Any](id)
-              Left(LoopState(Some(() => body(ref)), tail, count, locks, refs + (id -> a), deferreds))
+            case Left(mkref: MkRef[a, b]) =>
+              val a = mkref.a
+              val ref = new Ref[a](mkref.id)
+              Left(LoopState(Some(() => mkref.body(ref)), tail, count, locks, refs + (mkref.id -> a), deferreds))
 
-            case Left(ModifyRef(ref, f, body)) =>
-              val a = refs(ref.monitorId)
-              val (newA, b) = f(a)
-              Left(LoopState(Some(() => body(b)), tail, count, locks, refs.updated(ref.monitorId, newA), deferreds))
+            case Left(modifyRef: ModifyRef[a, b, c]) =>
+              val a = refs(modifyRef.ref.monitorId).asInstanceOf[a]
+              val (newA, b) = modifyRef.f(a)
+              Left(LoopState(Some(() => modifyRef.body(b)), tail, count, locks, refs.updated(modifyRef.ref.monitorId, newA), deferreds))
 
-            case Left(MkDeferred(id, body)) =>
-              val deferred = new Deferred[Any](id)
-              Left(LoopState(Some(() => body(deferred)), tail, count, locks, refs, deferreds))
+            case Left(mkDeferred: MkDeferred[a, b]) =>
+              val deferred = new Deferred[a](mkDeferred.id)
+              Left(LoopState(Some(() => mkDeferred.body(deferred)), tail, count, locks, refs, deferreds))
 
-            case Left(TryGetDeferred(deferred, body)) =>
-              val optA = deferreds.get(deferred.monitorId)
-              Left(LoopState(Some(() => body(optA)), tail, count, locks, refs, deferreds))
+            case Left(tryGetDeferred: TryGetDeferred[a, b]) =>
+              val optA = deferreds.get(tryGetDeferred.deferred.monitorId).map(_.asInstanceOf[a])
+              Left(LoopState(Some(() => tryGetDeferred.body(optA)), tail, count, locks, refs, deferreds))
 
-            case Left(CompleteDeferred(deferred, a, body)) =>
-              Left(LoopState(Some(() => body()), tail, count, locks, refs, deferreds.updatedWith(deferred.monitorId) {
-                case Some(oldA) => Some(oldA)
-                case None => Some(a)
-              }))
+            case Left(completeDeferred: CompleteDeferred[a, b]) =>
+              val newA = deferreds.get(completeDeferred.deferred.monitorId).map(_.asInstanceOf[a]).getOrElse(completeDeferred.a)
+              Left(LoopState(Some(() => completeDeferred.body()), tail, count, locks, refs, deferreds.updated(completeDeferred.deferred.monitorId, newA)))
           }
 
         // if we have outstanding awaits but no active fibers, then we're deadlocked
@@ -199,9 +198,9 @@ object ThreadT {
 
     def drawId(id: MonitorId): String = "0x" + id.hashCode.toHexString.toUpperCase
 
-    def drawRef(ref: Ref[Any], a: Any): String = "Ref(id = " + drawId(ref.monitorId) + ") =" + a.toString
+    def drawRef(ref: Ref[_], a: Any): String = "Ref(id = " + drawId(ref.monitorId) + ") =" + a.toString
 
-    def drawDeferred(deferred: Deferred[Any]): String = "Deferred(id = " + drawId(deferred.monitorId) + ")"
+    def drawDeferred(deferred: Deferred[_]): String = "Deferred(id = " + drawId(deferred.monitorId) + ")"
 
     case class LoopState(
         target: ThreadT[M, A],
@@ -274,33 +273,31 @@ object ThreadT {
               val acc2 = acc + drawIndent(indent2, DedentStr) + "\n"
               LoopState(results(), acc2, indent2, false, count, refs, deferreds).asLeft[String].pure[M]
 
-            case Left(MkRef(a, id, body)) =>
-              val ref = new Ref[Any](id)
-              val acc2 = acc + drawIndent(indent, junc + " Create ref ") + drawRef(ref, a) + "\n"
-              LoopState(body(ref), acc2, indent, init, count, refs + (ref.monitorId -> a), deferreds).asLeft[String].pure[M]
+            case Left(mkRef: MkRef[a, b]) =>
+              val ref = new Ref[a](mkRef.id)
+              val acc2 = acc + drawIndent(indent, junc + " Create ref ") + drawRef(ref, mkRef.a) + "\n"
+              LoopState(mkRef.body(ref), acc2, indent, init, count, refs + (ref.monitorId -> mkRef.a), deferreds).asLeft[String].pure[M]
 
-            case Left(ModifyRef(ref, f, body)) =>
-              val a = refs(ref.monitorId)
-              val (newA, b) = f(a)
-              val acc2 = acc + drawIndent(indent, junc + " Modify ref ") + drawRef(ref, newA) + ", produced " + b.toString + "\n"
-              LoopState(body(b), acc2, indent, init, count, refs.updated(ref.monitorId, newA), deferreds).asLeft[String].pure[M]
+            case Left(modifyRef: ModifyRef[a, b, c]) =>
+              val a = refs(modifyRef.ref.monitorId).asInstanceOf[a]
+              val (newA, b) = modifyRef.f(a)
+              val acc2 = acc + drawIndent(indent, junc + " Modify ref ") + drawRef(modifyRef.ref, newA) + ", produced " + b.toString + "\n"
+              LoopState(modifyRef.body(b), acc2, indent, init, count, refs.updated(modifyRef.ref.monitorId, newA), deferreds).asLeft[String].pure[M]
 
-            case Left(MkDeferred(id, body)) =>
-              val deferred = new Deferred[Any](id)
+            case Left(mkDeferred: MkDeferred[a, b]) =>
+              val deferred = new Deferred[a](mkDeferred.id)
               val acc2 = acc + drawIndent(indent, junc + " Create deferred ") + drawDeferred(deferred) + "\n"
-              LoopState(body(deferred), acc2, indent, init, count, refs, deferreds).asLeft[String].pure[M]
+              LoopState(mkDeferred.body(deferred), acc2, indent, init, count, refs, deferreds).asLeft[String].pure[M]
 
-            case Left(TryGetDeferred(deferred, body)) =>
-              val optA = deferreds.get(deferred.monitorId)
-              val acc2 = acc + drawIndent(indent, junc + " Try get deferred ") + drawDeferred(deferred) + " = " + optA.toString + "\n"
-              LoopState(body(optA), acc2, indent, init, count, refs, deferreds).asLeft[String].pure[M]
+            case Left(tryGetDeferred: TryGetDeferred[a, b]) =>
+              val optA = deferreds.get(tryGetDeferred.deferred.monitorId).map(_.asInstanceOf[a])
+              val acc2 = acc + drawIndent(indent, junc + " Try get deferred ") + drawDeferred(tryGetDeferred.deferred) + " = " + optA.toString + "\n"
+              LoopState(tryGetDeferred.body(optA), acc2, indent, init, count, refs, deferreds).asLeft[String].pure[M]
 
-            case Left(CompleteDeferred(deferred, a, body)) =>
-              val acc2 = acc + drawIndent(indent, junc + " Complete deferred ") + drawDeferred(deferred) + " with value " + a.toString + "\n"
-              LoopState(body(), acc2, indent, init, count, refs, deferreds.updatedWith(deferred.monitorId) {
-                case Some(oldA) => Some(oldA)
-                case None => Some(a)
-              }).asLeft[String].pure[M]
+            case Left(completeDeferred: CompleteDeferred[a, b]) =>
+              val newA = deferreds.get(completeDeferred.deferred.monitorId).map(_.asInstanceOf[a]).getOrElse(completeDeferred.a)
+              val acc2 = acc + drawIndent(indent, junc + " Complete deferred ") + drawDeferred(completeDeferred.deferred) + " with value " + newA.toString + "\n"
+              LoopState(completeDeferred.body(), acc2, indent, init, count, refs, deferreds.updated(completeDeferred.deferred.monitorId, newA)).asLeft[String].pure[M]
 
             case Right(a) =>
               (acc + drawIndent(indent, TurnRight + " Pure " + a.show + trailing)).asRight[LoopState].pure[M]
