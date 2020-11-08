@@ -16,46 +16,47 @@
 
 package coop
 
-import cats.Functor
+import cats.Applicative
+import cats.free.FreeT
 
-import ThreadF.MonitorId
+import ThreadF._
 
 final class Ref[A] private[coop] (private[coop] val monitorId: MonitorId) { self =>
-  def get[F[_]: ApplicativeThread]: F[A] =
+  def get[F[_]: Applicative]: ThreadT[F, A] =
     modify(a => (a, a))
 
-  def set[F[_]: ApplicativeThread](a: A): F[Unit] =
+  def set[F[_]: Applicative](a: A): ThreadT[F, Unit] =
     modify(_ => (a, ()))
   
-  def modify[F[_]: ApplicativeThread, B](f: A => (A, B)): F[B] =
-    ApplicativeThread[F].refModify[A, B](this, f)
+  def modify[F[_]: Applicative, B](f: A => (A, B)): ThreadT[F, B] =
+    FreeT.liftF(ModifyRef(this, f, identity[B]))
 
-  def getAndSet[F[_]: ApplicativeThread](a: A): F[A] =
+  def getAndSet[F[_]: Applicative](a: A): ThreadT[F, A] =
     modify(oldA => (a, oldA))
 
-  def getAndUpdate[F[_]: ApplicativeThread](f: A => A): F[A] =
+  def getAndUpdate[F[_]: Applicative](f: A => A): ThreadT[F, A] =
     modify(a => (f(a), a))
 
-  def updateAndGet[F[_]: ApplicativeThread](f: A => A): F[A] =
+  def updateAndGet[F[_]: Applicative](f: A => A): ThreadT[F, A] =
     modify { a =>
       val newA = f(a)
       (newA, newA)
     }
 
-  def apply[F[_]: ApplicativeThread]: RefPartiallyApplied[F] =
+  def apply[F[_]: Applicative]: RefPartiallyApplied[F] =
     new RefPartiallyApplied[F]
 
-  class RefPartiallyApplied[F[_]: ApplicativeThread] {
-    val get: F[A] = self.get
-    def set(a: A): F[Unit] = self.set(a)
-    def modify[B](f: A => (A, B)): F[B] = self.modify(f)
-    def getAndSet(a: A): F[A] = self.getAndSet(a)
-    def getAndUpdate(f: A => A): F[A] = self.getAndUpdate(f)
-    def updateAndGet(f: A => A): F[A] = self.updateAndGet(f)
+  class RefPartiallyApplied[F[_]: Applicative] {
+    val get: ThreadT[F, A] = self.get
+    def set(a: A): ThreadT[F, Unit] = self.set(a)
+    def modify[B](f: A => (A, B)): ThreadT[F, B] = self.modify(f)
+    def getAndSet(a: A): ThreadT[F, A] = self.getAndSet(a)
+    def getAndUpdate(f: A => A): ThreadT[F, A] = self.getAndUpdate(f)
+    def updateAndGet(f: A => A): ThreadT[F, A] = self.updateAndGet(f)
   }
 }
 
 object Ref {
-  def of[F[_]: Functor: ApplicativeThread, A](a: A): F[Ref[A]] =
-    ApplicativeThread[F].refOf(a)
+  def of[F[_]: Applicative, A](a: A): ThreadT[F, Ref[A]] =
+    ThreadT.monitor[F].flatMap(id => FreeT.liftF(MkRef(a, id, identity[Ref[A]])))
 }

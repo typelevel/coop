@@ -16,35 +16,36 @@
 
 package coop
 
-import cats.Monad
+import cats.{Applicative, Monad}
+import cats.free.FreeT
 import cats.syntax.all._
 
-import ThreadF.MonitorId
+import ThreadF._
 
 final class Deferred[A] private[coop] (private[coop] val monitorId: MonitorId) { self =>
-  def tryGet[F[_]: ApplicativeThread]: F[Option[A]] =
-    ApplicativeThread[F].deferredTryGet(this)
+  def tryGet[F[_]: Applicative]: ThreadT[F, Option[A]] =
+    FreeT.liftF(TryGetDeferred(this, identity[Option[A]]))
 
-  def get[F[_]: Monad: ApplicativeThread]: F[A] =
+  def get[F[_]: Monad]: ThreadT[F, A] =
     tryGet[F].flatMap {
-      case Some(a) => Monad[F].pure(a)
-      case None => ApplicativeThread[F].await(monitorId) >> get[F]
+      case Some(a) => Applicative[ThreadT[F, *]].pure(a)
+      case None => ThreadT.await(monitorId) >> get[F]
     }
 
-  def complete[F[_]: Monad: ApplicativeThread](a: A): F[Unit] =
-    ApplicativeThread[F].deferredComplete(this, a) >> ApplicativeThread[F].notify(monitorId)
+  def complete[F[_]: Monad](a: A): ThreadT[F, Unit] =
+    FreeT.liftF(CompleteDeferred(this, a, () => ()): ThreadF[Unit]) >> ThreadT.notify[F](monitorId)
 
-  def apply[F[_]: Monad: ApplicativeThread]: DeferredPartiallyApplied[F] =
+  def apply[F[_]: Monad]: DeferredPartiallyApplied[F] =
     new DeferredPartiallyApplied[F]
 
-  class DeferredPartiallyApplied[F[_]: Monad: ApplicativeThread] {
-    def tryGet: F[Option[A]] = self.tryGet
-    def get: F[A] = self.get
-    def complete(a: A): F[Unit] = self.complete(a)
+  class DeferredPartiallyApplied[F[_]: Monad] {
+    def tryGet: ThreadT[F, Option[A]] = self.tryGet
+    def get: ThreadT[F, A] = self.get
+    def complete(a: A): ThreadT[F, Unit] = self.complete(a)
   }
 }
 
 object Deferred {
-  def apply[F[_]: ApplicativeThread, A]: F[Deferred[A]] =
-    ApplicativeThread[F].deferred
+  def apply[F[_]: Applicative, A]: ThreadT[F, Deferred[A]] =
+    ThreadT.monitor[F].flatMap(id => FreeT.liftF(MkDeferred(id, identity[Deferred[A]])))
 }

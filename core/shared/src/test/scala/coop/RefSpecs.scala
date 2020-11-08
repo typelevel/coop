@@ -18,23 +18,18 @@ package coop
 
 import cats.data.State
 import cats.kernel.Monoid
-import cats.mtl.Stateful
 
 import org.specs2.mutable.Specification
 
 class RefSpecs extends Specification {
-  import FreeTInstances._
-
-  type F[S, A] = ThreadT[State[S, *], A]
-  
   "Ref" should {
     "get and set successfully" in {
       val eff = for {
-        ref <- Ref.of[F[(Int, Int), *], Int](5)
-        refp = ref[F[(Int, Int), *]]
+        ref <- Ref.of[State[(Int, Int), *], Int](5)
+        refp = ref[State[(Int, Int), *]]
         v1 <- refp.getAndSet(10)
         v2 <- refp.get
-        _ <- Stateful[F[(Int, Int), *], (Int, Int)].set((v1, v2))
+        _ <- ThreadT.liftF(State.set((v1, v2)))
       } yield ()
 
       runToCompletionEmpty(eff) mustEqual ((5, 10))
@@ -42,11 +37,11 @@ class RefSpecs extends Specification {
 
     "get and update successfully" in {
       val eff = for {
-        ref <- Ref.of[F[(Int, Int), *], Int](5)
-        refp = ref[F[(Int, Int), *]]
+        ref <- Ref.of[State[(Int, Int), *], Int](5)
+        refp = ref[State[(Int, Int), *]]
         v1 <- refp.getAndUpdate(_ * 2)
         v2 <- refp.get
-        _ <- Stateful[F[(Int, Int), *], (Int, Int)].set((v1, v2))
+        _ <- ThreadT.liftF(State.set((v1, v2)))
       } yield ()
 
       runToCompletionEmpty(eff) mustEqual ((5, 10))
@@ -54,11 +49,11 @@ class RefSpecs extends Specification {
 
     "update and get successfully" in {
       val eff = for {
-        ref <- Ref.of[F[(Int, Int), *], Int](5)
-        refp = ref[F[(Int, Int), *]]
+        ref <- Ref.of[State[(Int, Int), *], Int](5)
+        refp = ref[State[(Int, Int), *]]
         v1 <- refp.updateAndGet(_ * 2)
         v2 <- refp.get
-        _ <- Stateful[F[(Int, Int), *], (Int, Int)].set((v1, v2))
+        _ <- ThreadT.liftF(State.set((v1, v2)))
       } yield ()
 
       runToCompletionEmpty(eff) mustEqual ((10, 10))
@@ -66,21 +61,21 @@ class RefSpecs extends Specification {
 
     "set from a background thread" in {
       val eff = for {
-        ref <- Ref.of[F[Int, *], Int](5)
-        refp = ref[F[Int, *]]
-        _ <- ApplicativeThread[F[Int, *]].start(refp.set(10))
-        _ <- ApplicativeThread[F[Int, *]].cede
+        ref <- Ref.of[State[Int, *], Int](5)
+        refp = ref[State[Int, *]]
+        _ <- ThreadT.start(refp.set(10))
+        _ <- ThreadT.cede[State[Int, *]]
         v <- refp.get
-        _ <- Stateful[F[Int, *], Int].set(v)
+        _ <- ThreadT.liftF(State.set(v))
       } yield ()
 
       runToCompletionEmpty(eff) mustEqual(10)
     }
   }
 
-  def runToCompletionEmpty[S: Monoid](fa: F[S, _]): S =
+  def runToCompletionEmpty[S: Monoid](fa: ThreadT[State[S, *], _]): S =
     runToCompletion(Monoid[S].empty, fa)
 
-  def runToCompletion[S](init: S, fa: F[S, _]): S =
+  def runToCompletion[S](init: S, fa: ThreadT[State[S, *], _]): S =
     ThreadT.roundRobin(fa).runS(init).value
 }

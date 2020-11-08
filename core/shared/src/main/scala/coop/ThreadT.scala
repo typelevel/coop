@@ -58,21 +58,6 @@ object ThreadT {
         body
     }
 
-  def refOf[M[_]: Applicative, A](a: A): ThreadT[M, Ref[A]] =
-    monitor[M].flatMap(id => FreeT.liftF(MkRef(a, id, identity[Ref[A]])))
-
-  def modify[M[_]: Applicative, A, B](ref: Ref[A], f: A => (A, B)): ThreadT[M, B] =
-    FreeT.liftF(ModifyRef(ref, f, identity[B]))
-
-  def deferred[M[_]: Applicative, A]: ThreadT[M, Deferred[A]] =
-    monitor[M].flatMap(id => FreeT.liftF(MkDeferred(id, identity[Deferred[A]])))
-
-  def deferredTryGet[M[_]: Applicative, A](deferred: Deferred[A]): ThreadT[M, Option[A]] =
-    FreeT.liftF(TryGetDeferred(deferred, identity[Option[A]]))
-
-  def deferredComplete[M[_]: Applicative, A](deferred: Deferred[A], a: A): ThreadT[M, Unit] =
-    FreeT.liftF(CompleteDeferred(deferred, a, () => ()))
-
   def roundRobin[M[_]: Monad, A](main: ThreadT[M, A]): M[Boolean] = {
     // we maintain a separate head just to avoid queue prepending
     case class LoopState(

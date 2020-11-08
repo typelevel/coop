@@ -18,24 +18,19 @@ package coop
 
 import cats.data.State
 import cats.kernel.Monoid
-import cats.mtl.Stateful
 import cats.syntax.all._
 
 import org.specs2.mutable.Specification
 
 class DeferredSpecs extends Specification {
-  import FreeTInstances._
-
-  type F[S, A] = ThreadT[State[S, *], A]
-  
   "Deferred" should {
     "complete" in {
       val eff = for {
-        d <- Deferred[F[Int, *], Int]
-        dp = d[F[Int, *]]
+        d <- Deferred[State[Int, *], Int]
+        dp = d[State[Int, *]]
         _ <- dp.complete(10)
         v <- dp.get
-        _ <- Stateful[F[Int, *], Int].set(v)
+        _ <- ThreadT.liftF(State.set(v))
       } yield ()
 
       runToCompletionEmpty(eff) mustEqual 10
@@ -43,12 +38,12 @@ class DeferredSpecs extends Specification {
 
     "complete only once" in {
       val eff = for {
-        d <- Deferred[F[Int, *], Int]
-        dp = d[F[Int, *]]
+        d <- Deferred[State[Int, *], Int]
+        dp = d[State[Int, *]]
         _ <- dp.complete(10)
         _ <- dp.complete(20)
         v <- dp.get
-        _ <- Stateful[F[Int, *], Int].set(v)
+        _ <- ThreadT.liftF(State.set(v))
       } yield ()
 
       runToCompletionEmpty(eff) mustEqual 10
@@ -56,10 +51,10 @@ class DeferredSpecs extends Specification {
 
     "tryGet returns None for unset Deferred" in {
       val eff = for {
-        d <- Deferred[F[Option[Int], *], Int]
-        dp = d[F[Option[Int], *]]
+        d <- Deferred[State[Option[Int], *], Int]
+        dp = d[State[Option[Int], *]]
         v <- dp.tryGet
-        _ <- Stateful[F[Option[Int], *], Option[Int]].set(v)
+        _ <- ThreadT.liftF(State.set(v))
       } yield ()
 
       runToCompletionEmpty(eff) mustEqual None
@@ -67,11 +62,11 @@ class DeferredSpecs extends Specification {
 
     "tryGet returns Some for set Deferred" in {
       val eff = for {
-        d <- Deferred[F[Option[Int], *], Int]
-        dp = d[F[Option[Int], *]]
+        d <- Deferred[State[Option[Int], *], Int]
+        dp = d[State[Option[Int], *]]
         _ <- dp.complete(10)
         v <- dp.tryGet
-        _ <- Stateful[F[Option[Int], *], Option[Int]].set(v)
+        _ <- ThreadT.liftF(State.set(v))
       } yield ()
 
       runToCompletionEmpty(eff) mustEqual Some(10)
@@ -79,23 +74,23 @@ class DeferredSpecs extends Specification {
 
     "get blocks until set" in {
       val eff = for {
-        state <- Ref.of[F[Int, *], Int](0)
-        modifyGate <- Deferred[F[Int, *], Unit]
-        readGate <- Deferred[F[Int, *], Unit]
-        _ <- ApplicativeThread[F[Int, *]].start(modifyGate.get[F[Int, *]] *> state.updateAndGet[F[Int, *]](_ * 2) *> readGate.complete[F[Int, *]](()))
-        _ <- ApplicativeThread[F[Int, *]].start(state.set[F[Int, *]](1) *> modifyGate.complete[F[Int, *]](()))
-        _ <- readGate.get[F[Int, *]]
-        v <- state.get[F[Int, *]]
-        _ <- Stateful[F[Int, *], Int].set(v)
+        state <- Ref.of[State[Int, *], Int](0)
+        modifyGate <- Deferred[State[Int, *], Unit]
+        readGate <- Deferred[State[Int, *], Unit]
+        _ <- ThreadT.start(modifyGate.get[State[Int, *]] *> state.updateAndGet[State[Int, *]](_ * 2) *> readGate.complete[State[Int, *]](()))
+        _ <- ThreadT.start(state.set[State[Int, *]](1) *> modifyGate.complete[State[Int, *]](()))
+        _ <- readGate.get[State[Int, *]]
+        v <- state.get[State[Int, *]]
+        _ <- ThreadT.liftF(State.set(v))
       } yield ()
 
       runToCompletionEmpty(eff) mustEqual 2
     }
   }
 
-  def runToCompletionEmpty[S: Monoid](fa: F[S, _]): S =
+  def runToCompletionEmpty[S: Monoid](fa: ThreadT[State[S, *], _]): S =
     runToCompletion(Monoid[S].empty, fa)
 
-  def runToCompletion[S](init: S, fa: F[S, _]): S =
+  def runToCompletion[S](init: S, fa: ThreadT[State[S, *], _]): S =
     ThreadT.roundRobin(fa).runS(init).value
 }
