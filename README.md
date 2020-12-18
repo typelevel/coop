@@ -10,7 +10,7 @@ Based on http://www.haskellforall.com/2013/06/from-zero-to-cooperative-threads-i
 libraryDependencies += "org.typelevel" %% "coop" % "<version>"
 ```
 
-Published for Scala 2.13, 2.12, 3.0.0-M1, and 3.0.0-M2, with cross-publication for ScalaJS 1.x. Depends on Cats Free 2.2.0 and Cats MTL 1.0.0.
+Published for Scala 2.13, 2.12, 3.0.0-M2, and 3.0.0-M3, with cross-publication for ScalaJS 1.x. Depends on Cats Free 2.3.1 and Cats MTL 1.1.1.
 
 ```scala
 import coop.ThreadT
