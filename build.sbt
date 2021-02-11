@@ -46,6 +46,6 @@ lazy val core = crossProject(JSPlatform, JVMPlatform).in(file("core"))
   .settings(dottyLibrarySettings)
   .settings(
     libraryDependencies ++= Seq(
-      "org.typelevel" %%% "cats-free" % "2.3.1",
+      "org.typelevel" %%% "cats-free" % "2.4.1",
       "org.typelevel" %%% "cats-mtl"  % "1.1.1"))
 
