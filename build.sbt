@@ -24,10 +24,9 @@ ThisBuild / publishFullName := "Daniel Spiewak"
 
 ThisBuild / strictSemVer := false
 
-ThisBuild / crossScalaVersions := Seq("3.0.0-M2", "3.0.0-M3", "2.12.12", "2.13.4")
+ThisBuild / crossScalaVersions := Seq("3.0.0-M3", "3.0.0-RC1", "2.12.12", "2.13.4")
 
-// Restore running the CI on Java 15 (https://github.com/lampepfl/dotty/issues/10131).
-ThisBuild / githubWorkflowJavaVersions := Seq("adopt@1.8", "adopt@1.11", "graalvm-ce-java8@20.2.0")
+ThisBuild / githubWorkflowJavaVersions := Seq("adopt@1.8", "adopt@1.11", "adopt@1.14", "graalvm-ce-java8@20.2.0")
 
 ThisBuild / homepage := Some(url("https://github.com/typelevel/coop"))
 
@@ -46,6 +45,5 @@ lazy val core = crossProject(JSPlatform, JVMPlatform).in(file("core"))
   .settings(dottyLibrarySettings)
   .settings(
     libraryDependencies ++= Seq(
-      "org.typelevel" %%% "cats-free" % "2.4.1",
-      "org.typelevel" %%% "cats-mtl"  % "1.1.1"))
-
+      "org.typelevel" %%% "cats-free" % "2.4.2",
+      "org.typelevel" %%% "cats-mtl"  % "1.1.2"))
