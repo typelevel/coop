@@ -24,7 +24,7 @@ ThisBuild / publishFullName := "Daniel Spiewak"
 
 ThisBuild / strictSemVer := false
 
-ThisBuild / crossScalaVersions := Seq("3.0.0-M3", "3.0.0-RC1", "2.12.13", "2.13.5")
+ThisBuild / crossScalaVersions := Seq("3.0.0-RC1", "3.0.0-RC2", "2.12.13", "2.13.5")
 
 ThisBuild / githubWorkflowJavaVersions := Seq("adopt@1.8", "adopt@1.11", "adopt@1.14", "graalvm-ce-java8@20.2.0")
 
@@ -45,5 +45,5 @@ lazy val core = crossProject(JSPlatform, JVMPlatform).in(file("core"))
   .settings(dottyLibrarySettings)
   .settings(
     libraryDependencies ++= Seq(
-      "org.typelevel" %%% "cats-free" % "2.4.2",
-      "org.typelevel" %%% "cats-mtl"  % "1.1.2"))
+      "org.typelevel" %%% "cats-free" % "2.5.0",
+      "org.typelevel" %%% "cats-mtl"  % "1.1.3"))
