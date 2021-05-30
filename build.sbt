@@ -24,7 +24,7 @@ ThisBuild / publishFullName := "Daniel Spiewak"
 
 ThisBuild / strictSemVer := false
 
-ThisBuild / crossScalaVersions := Seq("3.0.0", "2.12.14", "2.13.5")
+ThisBuild / crossScalaVersions := Seq("3.0.0", "2.12.13", "2.13.6")
 
 ThisBuild / githubWorkflowJavaVersions := Seq("adopt@1.8", "adopt@1.11", "adopt@1.14", "graalvm-ce-java8@20.2.0")
 
@@ -41,8 +41,7 @@ lazy val root = project.in(file(".")).aggregate(core.jvm, core.js)
 lazy val core = crossProject(JSPlatform, JVMPlatform).in(file("core"))
   .settings(
     name := "coop",
-    libraryDependencies += "org.specs2" %%% "specs2-core" % "4.11.0" % Test)
-  .settings(dottyLibrarySettings)
+    libraryDependencies += ("org.specs2" %%% "specs2-core" % "4.12.0" % Test).cross(CrossVersion.for3Use2_13))
   .settings(
     libraryDependencies ++= Seq(
       "org.typelevel" %%% "cats-free" % "2.6.1",
