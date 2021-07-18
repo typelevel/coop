@@ -45,7 +45,10 @@ object ThreadT {
     FreeT.liftF[ThreadF, M, Unit](Await(id, () => ()))
 
   def notify[M[_]: Applicative](id: MonitorId): ThreadT[M, Unit] =
-    FreeT.liftF[ThreadF, M, Unit](Notify(id, () => ()))
+    FreeT.liftF[ThreadF, M, Unit](Notify(false, id, () => ()))
+
+  def notifyAll[M[_]: Applicative](id: MonitorId): ThreadT[M, Unit] =
+    FreeT.liftF(Notify(true, id, () => ()))
 
   def start[M[_]: Applicative, A](child: ThreadT[M, A]): ThreadT[M, Unit] =
     fork[M, Boolean](false, true).ifM(child >> done[M, Unit], ().pure[ThreadT[M, *]])
@@ -88,7 +91,14 @@ object ThreadT {
             case Left(Await(id, results)) =>
               Left(LoopState(None, tail, locks.updated(id, locks(id).enqueue(results))))
 
-            case Left(Notify(id, results)) =>
+            case Left(Notify(false, id, results)) =>
+              val dqOpt = locks(id).dequeueOption
+              val (newTail, newLocks) = dqOpt.map {
+                case (hd, tl) => (tail.enqueue(hd), locks.updated(id, tl))
+              }.getOrElse((tail, locks))
+              Left(LoopState(None, newTail.enqueue(results), newLocks))
+
+            case Left(Notify(true, id, results)) =>
               // enqueueAll was added in 2.13
               val tail2 = locks(id).foldLeft(tail)(_.enqueue(_))
               Left(LoopState(None, tail2.enqueue(results), locks.updated(id, Queue.empty)))
@@ -207,8 +217,9 @@ object ThreadT {
               val acc2 = acc + drawIndent(indent, junc + " Await ") + drawId(id) + "\n"
               LoopState(results(), acc2, indent, false).asLeft[String].pure[M]
 
-            case Left(Notify(id, results)) =>
-              val acc2 = acc + drawIndent(indent, junc + " Notify ") + drawId(id) + "\n"
+            case Left(Notify(all, id, results)) =>
+              val allStr = if (all) "all " else ""
+              val acc2 = acc + drawIndent(indent, junc + s" Notify $allStr") + drawId(id) + "\n"
               LoopState(results(), acc2, indent, false).asLeft[String].pure[M]
 
             case Left(Annotate(name, results)) =>

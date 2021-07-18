@@ -30,7 +30,7 @@ object ThreadF {
 
       case Monitor(body) => Monitor(body.andThen(f))
       case Await(id, results) => Await(id, () => f(results()))
-      case Notify(id, results) => Notify(id, () => f(results()))
+      case Notify(all, id, results) => Notify(all, id, () => f(results()))
 
       case Annotate(text, results) => Annotate(text, () => f(results()))
       case Indent(results) => Indent(() => f(results()))
@@ -44,7 +44,7 @@ object ThreadF {
 
   final case class Monitor[A](body: MonitorId => A) extends ThreadF[A]
   final case class Await[A](id: MonitorId, results: () => A) extends ThreadF[A]
-  final case class Notify[A](id: MonitorId, results: () => A) extends ThreadF[A]
+  final case class Notify[A](all: Boolean, id: MonitorId, results: () => A) extends ThreadF[A]
 
   final case class Annotate[A](text: String, results: () => A) extends ThreadF[A]
   final case class Indent[A](results: () => A) extends ThreadF[A]
