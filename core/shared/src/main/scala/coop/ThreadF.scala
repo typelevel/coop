@@ -35,6 +35,13 @@ object ThreadF {
       case Annotate(text, results) => Annotate(text, () => f(results()))
       case Indent(results) => Indent(() => f(results()))
       case Dedent(results) => Dedent(() => f(results()))
+
+      case MkRef(a, id, body) => MkRef(a, id, body.andThen(f))
+      case ModifyRef(ref, modF, body) => ModifyRef(ref, modF, body.andThen(f))
+
+      case MkDeferred(id, body) => MkDeferred(id, body.andThen(f))
+      case TryGetDeferred(deferred, body) => TryGetDeferred(deferred, body.andThen(f))
+      case CompleteDeferred(deferred, a, body) => CompleteDeferred(deferred, a, () => f(body()))
     }
   }
 
@@ -50,6 +57,14 @@ object ThreadF {
   final case class Indent[A](results: () => A) extends ThreadF[A]
   final case class Dedent[A](results: () => A) extends ThreadF[A]
 
+  final case class MkRef[A, B](a: A, id: MonitorId, body: Ref[A] => B) extends ThreadF[B]
+  final case class ModifyRef[A, B, C](ref: Ref[A], f: A => (A, B), body: B => C) extends ThreadF[C]
+
+  final case class MkDeferred[A, B](id: MonitorId, body: Deferred[A] => B) extends ThreadF[B]
+  final case class TryGetDeferred[A, B](deferred: Deferred[A], body: Option[A] => B) extends ThreadF[B]
+  final case class CompleteDeferred[A, B](deferred: Deferred[A], a: A, body: () => B) extends ThreadF[B]
+  
   // an opaque fresh id
-  final class MonitorId private[coop] ()
+  final case class MonitorId private[coop] (private[coop] val id: Int)
+  private object MonitorId
 }
