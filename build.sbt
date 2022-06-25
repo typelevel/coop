@@ -35,14 +35,16 @@ ThisBuild / scmInfo := Some(
     url("https://github.com/typelevel/coop"),
     "git@github.com:typelevel/coop.git"))
 
-lazy val root = project.in(file(".")).aggregate(core.jvm, core.js)
+lazy val root = project.in(file(".")).aggregate(core.jvm, core.js, core.native)
   .enablePlugins(NoPublishPlugin)
 
-lazy val core = crossProject(JSPlatform, JVMPlatform).in(file("core"))
+lazy val core = crossProject(JSPlatform, JVMPlatform, NativePlatform).in(file("core"))
   .settings(
     name := "coop",
     libraryDependencies += "org.specs2" %%% "specs2-core" % "4.16.0" % Test)
   .settings(
     libraryDependencies ++= Seq(
       "org.typelevel" %%% "cats-free" % "2.8.0",
-      "org.typelevel" %%% "cats-mtl"  % "1.2.1"))
+      "org.typelevel" %%% "cats-mtl"  % "1.3-70d33f4-SNAPSHOT"))
+
+ThisBuild / resolvers += "s01" at "https://s01.oss.sonatype.org/content/repositories/snapshots/"
