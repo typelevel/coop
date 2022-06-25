@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-ThisBuild / baseVersion := "1.1"
+ThisBuild / baseVersion := "1.2"
 
 ThisBuild / organization := "org.typelevel"
 ThisBuild / organizationName := "Typelevel"
