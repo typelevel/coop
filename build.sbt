@@ -45,6 +45,4 @@ lazy val core = crossProject(JSPlatform, JVMPlatform, NativePlatform).in(file("c
   .settings(
     libraryDependencies ++= Seq(
       "org.typelevel" %%% "cats-free" % "2.8.0",
-      "org.typelevel" %%% "cats-mtl"  % "1.3-70d33f4-SNAPSHOT"))
-
-ThisBuild / resolvers += "s01" at "https://s01.oss.sonatype.org/content/repositories/snapshots/"
+      "org.typelevel" %%% "cats-mtl"  % "1.3.0"))
