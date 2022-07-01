@@ -41,7 +41,7 @@ lazy val root = project.in(file(".")).aggregate(core.jvm, core.js, core.native)
 lazy val core = crossProject(JSPlatform, JVMPlatform, NativePlatform).in(file("core"))
   .settings(
     name := "coop",
-    libraryDependencies += "org.specs2" %%% "specs2-core" % "4.16.0" % Test)
+    libraryDependencies += "org.specs2" %%% "specs2-core" % "4.16.1" % Test)
   .settings(
     libraryDependencies ++= Seq(
       "org.typelevel" %%% "cats-free" % "2.8.0",
