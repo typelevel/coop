@@ -44,5 +44,5 @@ lazy val core = crossProject(JSPlatform, JVMPlatform, NativePlatform).in(file("c
     libraryDependencies += "org.specs2" %%% "specs2-core" % "4.16.0" % Test)
   .settings(
     libraryDependencies ++= Seq(
-      "org.typelevel" %%% "cats-free" % "2.8.0",
+      "org.typelevel" %%% "cats-free" % "2.9.0",
       "org.typelevel" %%% "cats-mtl"  % "1.3.0"))
