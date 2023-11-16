@@ -17,16 +17,16 @@
 package coop
 
 import cats.{Eval, Monoid}
-import cats.data.{Kleisli, State}
-import cats.implicits._
+import cats.data.{State, StateT}
 import cats.mtl.Stateful
+import cats.syntax.all._
 
 import org.specs2.mutable.Specification
 
 class MVarSpecs extends Specification {
   import FreeTInstances._
 
-  type F[S, A] = Kleisli[ThreadT[State[S, *], *], MVar.Universe, A]
+  type F[S, A] = ThreadT[State[S, *], A]
 
   "mvar" should {
     "put and read values" in {
@@ -37,7 +37,7 @@ class MVarSpecs extends Specification {
         _ <- v.put(42)
         i <- v.read
 
-        _ <- Stateful[F[Int, *], Int].set(i)
+        _ <- StateT.liftF(Stateful[F[Int, *], Int].set(i))
       } yield ()
 
       runToCompletionEmpty(eff) mustEqual 42
@@ -47,7 +47,7 @@ class MVarSpecs extends Specification {
       val eff = for {
         v <- MVar.empty[F[Option[Int], *], Int]
         r <- v.tryRead[F[Option[Int], *]]
-        _ <- Stateful[F[Option[Int], *], Option[Int]].set(r)
+        _ <- StateT.liftF(Stateful[F[Option[Int], *], Option[Int]].set(r))
       } yield ()
 
       runToCompletionEmpty(eff) must beNone
@@ -57,7 +57,7 @@ class MVarSpecs extends Specification {
       val eff = for {
         v <- MVar[F[Boolean, *], Int](42)
         r <- v.tryPut[F[Boolean, *]](12)
-        _ <- Stateful[F[Boolean, *], Boolean].set(r)
+        _ <- StateT.liftF(Stateful[F[Boolean, *], Boolean].set(r))
       } yield ()
 
       runToCompletion(true, eff) must beFalse
@@ -71,7 +71,7 @@ class MVarSpecs extends Specification {
         r1 <- v.take
         r2 <- v.tryRead
 
-        _ <- Stateful[F[(Int, Option[Int]), *], (Int, Option[Int])].set((r1, r2))
+        _ <- StateT.liftF(Stateful[F[(Int, Option[Int]), *], (Int, Option[Int])].set((r1, r2)))
       } yield ()
 
       runToCompletionEmpty(eff) mustEqual ((42, None))
@@ -85,14 +85,14 @@ class MVarSpecs extends Specification {
         r1 <- v.swap(24)
         r2 <- v.read
 
-        _ <- Stateful[F[(Int, Int), *], (Int, Int)].set((r1, r2))
+        _ <- StateT.liftF(Stateful[F[(Int, Int), *], (Int, Int)].set((r1, r2)))
       } yield ()
 
       runToCompletionEmpty(eff) mustEqual ((42, 24))
     }
 
     "resolve a race condition" in {
-      val thread = ApplicativeThread[F[(Either[Int, Int], Int), *]]
+      val thread = ApplicativeThread[MVar.Action[F[(Either[Int, Int], Int), *], *]]
       val state = Stateful[F[(Either[Int, Int], Int), *], (Either[Int, Int], Int)]
 
       val eff = for {
@@ -104,20 +104,22 @@ class MVarSpecs extends Specification {
 
         _ <- thread start {
           v.tryPut(5).ifM(
-            ().pure[F[(Either[Int, Int], Int), *]],
-            results.put(Left(5)))
+            StateT.pure(()),
+            results.put(Left(5))
+          )
         }
 
         _ <- thread start {
           v.tryPut(8).ifM(
-            ().pure[F[(Either[Int, Int], Int), *]],
-            results.put(Right(8)))
+            StateT.pure(()),
+            results.put(Right(8))
+          )
         }
 
         r1 <- v.read
         r2 <- results.read
 
-        _ <- state.set((r2, r1))
+        _ <- StateT.liftF(state.set((r2, r1)))
       } yield ()
 
       val results = runToCompletionEmpty(eff)
@@ -126,16 +128,16 @@ class MVarSpecs extends Specification {
     }
 
     "detect a deadlock" in {
-      type F[A] = Kleisli[ThreadT[Eval, *], MVar.Universe, A]
+      type F[A] = ThreadT[Eval, A]
 
       val eff = MVar.empty[F, Unit].flatMap(_.read[F])
       ThreadT.roundRobin(MVar.resolve(eff)).value must beFalse
     }
   }
 
-  def runToCompletionEmpty[S: Monoid](fa: F[S, _]): S =
+  def runToCompletionEmpty[S: Monoid](fa: MVar.Action[F[S, *], _]): S =
     runToCompletion(Monoid[S].empty, fa)
 
-  def runToCompletion[S](init: S, fa: F[S, _]): S =
+  def runToCompletion[S](init: S, fa: MVar.Action[F[S, *], _]): S =
     ThreadT.roundRobin(MVar.resolve(fa)).runS(init).value
 }
