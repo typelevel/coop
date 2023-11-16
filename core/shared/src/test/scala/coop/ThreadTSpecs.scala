@@ -75,7 +75,7 @@ class ThreadTSpecs extends Specification {
         }
 
         _ <- cede[M]
-        _ <- ThreadT.notify[M](m)
+        _ <- ThreadT.notifyAll[M](m)
         _ <- liftF[M, Unit](WriterT.tell(3 :: Nil))
       } yield ()
 
@@ -83,6 +83,37 @@ class ThreadTSpecs extends Specification {
 
       completed must beTrue
       results mustEqual 0.to(3).toList
+    }
+
+    "notify only resumes 1 waiter" in {
+      import ThreadT._
+
+      type M[A] = WriterT[Eval, List[Int], A]
+
+      val main = for {
+        m <- monitor[M]
+
+        _ <- start {
+          ThreadT.await[M](m) >> liftF(WriterT.tell(0 :: Nil))
+        }
+
+        _ <- start {
+          ThreadT.await[M](m) >> liftF(WriterT.tell(1 :: Nil))
+        }
+
+        _ <- start {
+          ThreadT.await[M](m) >> liftF(WriterT.tell(2 :: Nil))
+        }
+
+        _ <- cede[M]
+        _ <- ThreadT.notify[M](m)
+        _ <- liftF[M, Unit](WriterT.tell(3 :: Nil))
+      } yield ()
+
+      val (results, completed) = roundRobin(main).run.value
+
+      completed must beFalse
+      results mustEqual List(0, 3)
     }
 
     "detect a trivial deadlock" in {

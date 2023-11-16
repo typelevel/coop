@@ -38,6 +38,8 @@ trait ApplicativeThread[F[_]] extends Serializable {
 
   def notify(id: MonitorId): F[Unit]
 
+  def notifyAll(id: MonitorId): F[Unit]
+
   def start[A](child: F[A]): F[Unit]
 
   def annotate[A](name: String, indent: Boolean = false)(body: F[A]): F[A]
@@ -73,7 +75,10 @@ object ApplicativeThread {
         FreeT.liftF(S(ThreadF.Await(id, () => ())))
 
       def notify(id: MonitorId): FreeT[S, F, Unit] =
-        FreeT.liftF(S(ThreadF.Notify(id, () => ())))
+        FreeT.liftF(S(ThreadF.Notify(false, id, () => ())))
+
+      def notifyAll(id: MonitorId): FreeT[S, F, Unit] =
+        FreeT.liftF(S(ThreadF.Notify(true, id, () => ())))
 
       def start[A](child: FreeT[S, F, A]): FreeT[S, F, Unit] =
         fork(false, true).ifM(child.void >> done[Unit], ().pure[FreeT[S, F, *]])
@@ -111,6 +116,9 @@ object ApplicativeThread {
       def notify(id: MonitorId): Kleisli[F, R, Unit] =
         Kleisli.liftF(thread.notify(id))
 
+      def notifyAll(id: MonitorId): Kleisli[F, R, Unit] =
+        Kleisli.liftF(thread.notifyAll(id))
+
       def start[A](child: Kleisli[F, R, A]): Kleisli[F, R, Unit] =
         Kleisli.ask[F, R] flatMapF { r =>
           thread.start(child.run(r))
@@ -143,6 +151,9 @@ object ApplicativeThread {
 
       def notify(id: MonitorId): EitherT[F, E, Unit] =
         EitherT.liftF(thread.notify(id))
+
+      def notifyAll(id: MonitorId): EitherT[F, E, Unit] =
+        EitherT.liftF(thread.notifyAll(id))
 
       def start[A](child: EitherT[F, E, A]): EitherT[F, E, Unit] =
         EitherT.liftF(thread.start(child.value))
