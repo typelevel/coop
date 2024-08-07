@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-ThisBuild / baseVersion := "1.2"
+ThisBuild / baseVersion := "1.3"
 
 ThisBuild / organization := "org.typelevel"
 ThisBuild / organizationName := "Typelevel"
@@ -24,9 +24,13 @@ ThisBuild / publishFullName := "Daniel Spiewak"
 
 ThisBuild / strictSemVer := false
 
-ThisBuild / crossScalaVersions := Seq("3.1.3", "2.12.16", "2.13.8")
+ThisBuild / crossScalaVersions := Seq("3.3.3", "2.12.19", "2.13.14")
 
-ThisBuild / githubWorkflowJavaVersions := Seq("adopt@1.8", "adopt@1.11", "adopt@1.14", "graalvm-ce-java8@20.2.0")
+ThisBuild / githubWorkflowJavaVersions := Seq(
+  JavaSpec(JavaSpec.Distribution.Adopt, "8"),
+  JavaSpec(JavaSpec.Distribution.Adopt, "11"),
+  JavaSpec(JavaSpec.Distribution.Adopt, "17"),
+  JavaSpec.graalvm("21.0.0.2", "java8"))
 
 ThisBuild / homepage := Some(url("https://github.com/typelevel/coop"))
 
@@ -41,8 +45,8 @@ lazy val root = project.in(file(".")).aggregate(core.jvm, core.js, core.native)
 lazy val core = crossProject(JSPlatform, JVMPlatform, NativePlatform).in(file("core"))
   .settings(
     name := "coop",
-    libraryDependencies += "org.specs2" %%% "specs2-core" % "4.16.0" % Test)
+    libraryDependencies += "org.specs2" %%% "specs2-core" % "4.20.8" % Test)
   .settings(
     libraryDependencies ++= Seq(
-      "org.typelevel" %%% "cats-free" % "2.8.0",
-      "org.typelevel" %%% "cats-mtl"  % "1.3.0"))
+      "org.typelevel" %%% "cats-free" % "2.12.0",
+      "org.typelevel" %%% "cats-mtl"  % "1.5.0"))
