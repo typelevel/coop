@@ -17,7 +17,7 @@
 package coop
 
 import cats.{Applicative, InjectK, Monad}
-import cats.data.{EitherT, Kleisli}
+import cats.data.{EitherT, Kleisli, StateT}
 import cats.free.FreeT
 import cats.syntax.all._
 
@@ -150,4 +150,39 @@ object ApplicativeThread {
       def annotate[A](name: String, indent: Boolean)(body: EitherT[F, E, A]): EitherT[F, E, A] =
         EitherT(thread.annotate(name, indent)(body.value))
     }
+
+    implicit def forStateT[F[_]: Monad: ApplicativeThread, E]: ApplicativeThread[StateT[F, E, *]] =
+      new ApplicativeThread[StateT[F, E, *]] {
+        private val thread = ApplicativeThread[F]
+
+        val applicative = Applicative[StateT[F, E, *]]
+
+        def fork[A](left: => A, right: => A): StateT[F, E, A] =
+          StateT.liftF(thread.fork(left, right))
+
+        val cede: StateT[F, E, Unit] =
+          StateT.liftF(thread.cede)
+
+        def done[A]: StateT[F, E, A] =
+          StateT.liftF(thread.done[A])
+
+        val monitor: StateT[F, E, MonitorId] =
+          StateT.liftF(thread.monitor)
+
+        def await(id: MonitorId): StateT[F, E, Unit] =
+          StateT.liftF(thread.await(id))
+
+        def notify(id: MonitorId): StateT[F, E, Unit] =
+          StateT.liftF(thread.notify(id))
+
+        def start[A](child: StateT[F, E, A]): StateT[F, E, Unit] =
+          StateT { s =>
+            thread.start(child.run(s)).as((s, ()))
+          }
+
+        def annotate[A](name: String, indent: Boolean)(body: StateT[F, E, A]): StateT[F, E, A] =
+          StateT { s =>
+            thread.annotate(name, indent)(body.run(s))
+          }
+      }
 }
