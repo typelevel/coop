@@ -20,6 +20,7 @@ ThisBuild / startYear := Some(2021)
 ThisBuild / crossScalaVersions := Seq("3.3.3", "2.12.20", "2.13.15")
 ThisBuild / tlVersionIntroduced := Map("3" -> "1.1.1")
 
+ThisBuild / tlCiReleaseBranches := Seq("master")
 ThisBuild / tlCiScalafmtCheck := false
 
 lazy val root = tlCrossRootProject.aggregate(core)
