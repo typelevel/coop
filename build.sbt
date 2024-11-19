@@ -18,6 +18,8 @@ ThisBuild / tlBaseVersion := "1.3"
 ThisBuild / startYear := Some(2021)
 
 ThisBuild / crossScalaVersions := Seq("3.3.3", "2.12.20", "2.13.15")
+ThisBuild / tlVersionIntroduced := Map("3" -> "1.1.1")
+
 ThisBuild / tlCiScalafmtCheck := false
 
 lazy val root = tlCrossRootProject.aggregate(core)
@@ -30,3 +32,6 @@ lazy val core = crossProject(JSPlatform, JVMPlatform, NativePlatform).crossType(
     libraryDependencies ++= Seq(
       "org.typelevel" %%% "cats-free" % "2.12.0",
       "org.typelevel" %%% "cats-mtl"  % "1.5.0"))
+  .nativeSettings(
+    tlVersionIntroduced := List("2.12", "2.13", "3").map(_ -> "1.3.0").toMap
+  )
