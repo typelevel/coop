@@ -28,7 +28,7 @@ lazy val root = tlCrossRootProject.aggregate(core)
 lazy val core = crossProject(JSPlatform, JVMPlatform, NativePlatform).crossType(CrossType.Pure).in(file("core"))
   .settings(
     name := "coop",
-    libraryDependencies += "org.specs2" %%% "specs2-core" % "4.20.9" % Test)
+    libraryDependencies += "org.specs2" %%% "specs2-core" % "4.21.0" % Test)
   .settings(
     libraryDependencies ++= Seq(
       "org.typelevel" %%% "cats-free" % "2.12.0",
