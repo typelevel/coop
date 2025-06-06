@@ -31,7 +31,7 @@ lazy val core = crossProject(JSPlatform, JVMPlatform, NativePlatform).crossType(
     libraryDependencies += "org.specs2" %%% "specs2-core" % "4.20.9" % Test)
   .settings(
     libraryDependencies ++= Seq(
-      "org.typelevel" %%% "cats-free" % "2.12.0",
+      "org.typelevel" %%% "cats-free" % "2.13.0",
       "org.typelevel" %%% "cats-mtl"  % "1.5.0"))
   .nativeSettings(
     tlVersionIntroduced := List("2.12", "2.13", "3").map(_ -> "1.3.0").toMap
